@@ -5,7 +5,18 @@
 *.env
 secrets/
 
-# --- EXTENSIONS DE DONNÉES BANNIES (Partout dans le projet) ---
+# --- DONNÉES BRUTES & TRAITÉES (À NE JAMAIS PUSHER) ---
+data/
+!data/.gitkeep
+!data/README.md
+
+# --- DBT TARGET & LOGS (À NE JAMAIS PUSHER) ---
+dbt_project/target/
+dbt_project/logs/
+dbt_project/dbt_packages/
+dbt_project/dbt_modules/
+
+# --- FICHIERS DE DONNÉES (Partout) ---
 *.csv
 *.json
 *.parquet
@@ -13,32 +24,36 @@ secrets/
 *.db
 *.sqlite
 
-# --- EXCLUSIONS SPÉCIFIQUES DE L'ARBORESCENCE ---
-
-# Python & System
+# --- PYTHON ---
 __pycache__/
 dags/__pycache__/
 .ipynb_checkpoints/
 *.py[cod]
+*.so
+.Python
+build/
+dist/
 
-# Logs d'infrastructure
+# --- LOGS D'INFRASTRUCTURE ---
 *.log
 logs/
 
-# Apache Airflow (Fichiers locaux racines)
+# --- AIRFLOW (Local) ---
 airflow-webserver.pid
 airflow.cfg
 webserver_config.py
 
-# dbt Project (Ciblé dans ton vrai sous-dossier)
-dbt_project/target/
-dbt_project/logs/
-dbt_project/dbt_packages/
-dbt_project/dbt_modules/
-
-# Streamlit Cache
+# --- STREAMLIT ---
 streamlit-app/.streamlit/
 .streamlit/cache/
 
-# Base de données persistante locale Docker (si applicable)
-/postgres_data/
+# --- DOCKER ---
+postgres_data/
+.dockerignore
+
+# --- IDE & OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

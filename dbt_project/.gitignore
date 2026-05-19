@@ -4,4 +4,3 @@
 #ignore dossier dbt_modules (modules de packages)   
 
 target/
-logs/

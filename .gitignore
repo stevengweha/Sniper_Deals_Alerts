@@ -1,28 +1,83 @@
-##### security GitHub repository #####
-# This .gitignore file is used to specify which files and directories should be ignored by Git
-
-# ignore .env file which contains sensitive information
+##### Security & Environment #####
 .env
+.env.local
+.env.*.local
+secrets/
 
-# ignore Python bytecode files
+##### Python #####
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# ignore Jupyter Notebook checkpoints
+##### Jupyter Notebook #####
 .ipynb_checkpoints/
-# ignore Streamlit cache directory
-.streamlit/cache/
-# ignore log files
+*.ipynb
+
+##### Streamlit #####
+.streamlit/
+
+##### Databases #####
+*.db
+*.sqlite
+*.sqlite3
+
+##### Logs #####
 *.log
 logs/
-# ignore database files
-*.db
+airflow-webserver.pid
 
-#Dbt ignore target directory
-dbt_projet/target/
+##### dbt (Data Build Tool) #####
+dbt_project/target/
+dbt_project/logs/
+dbt_project/dbt_packages/
+dbt_project/profiles.yml.bak
 
-# IGNORE data/processed
+##### Data Processing #####
 data/processed/
+data/raw/*.csv
+!data/raw/.gitkeep
 
-webserver_config.py
+##### Spark & Airflow #####
+drivers/
+spark-warehouse/
 airflow_config.py
-airflow_webserver_config.pid
+webserver_config.py
+airflow.cfg.bak
+
+##### IDE & OS #####
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.tmp
+
+##### Docker #####
+.dockerignore
+docker-compose.override.yml
+
+##### Misc #####
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/

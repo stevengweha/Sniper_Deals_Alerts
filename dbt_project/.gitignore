@@ -1,0 +1,7 @@
+#ignore dossier target de dbt (résultats de compilation et artefacts)
+#ignore dossier logs de dbt (logs d'exécution)
+#ignore dossier dbt_packages (dépendances installées)
+#ignore dossier dbt_modules (modules de packages)   
+
+target/
+logs/

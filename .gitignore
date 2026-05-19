@@ -1,83 +1,47 @@
-##### Security & Environment #####
+##### Smart Buy Sentinel - Infrastructure Gitignore #####
+
+# --- SÉCURITÉ & SECRETS (CRITIQUE) ---
 .env
-.env.local
-.env.*.local
+*.env
+auth_*.json
 secrets/
 
-##### Python #####
+# --- DONNÉES / DATA (Garde la structure, ignore les fichiers de données) ---
+*.db
+*.sqlite
+/postgres_data/
+
+# Ignorer TOUS les fichiers de données n'importe où dans le projet
+*.csv
+*.json
+*.parquet
+*.avro
+
+# --- PYTHON & JUPYTER ---
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-##### Jupyter Notebook #####
 .ipynb_checkpoints/
-*.ipynb
+.pytest_cache/
+.virtualenv/
+venv/
+ENV/
 
-##### Streamlit #####
-.streamlit/
-
-##### Databases #####
-*.db
-*.sqlite
-*.sqlite3
-
-##### Logs #####
+# --- APACHE AIRFLOW ---
 *.log
 logs/
-airflow-webserver.pid
-
-##### dbt (Data Build Tool) #####
-dbt_project/target/
-dbt_project/logs/
-dbt_project/dbt_packages/
-dbt_project/profiles.yml.bak
-
-##### Data Processing #####
-data/processed/
-data/raw/*.csv
-!data/raw/.gitkeep
-
-##### Spark & Airflow #####
-drivers/
-spark-warehouse/
+/airflow/logs/
+/airflow/dags/__pycache__/
+airflow_webserver_config.pid
 airflow_config.py
 webserver_config.py
-airflow.cfg.bak
 
-##### IDE & OS #####
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
-*.tmp
+# --- dbt (DATA BUILD TOOL) ---
+target/
+dbt_project/target/
+dbt_modules/
+dbt_packages/
 
-##### Docker #####
-.dockerignore
-docker-compose.override.yml
-
-##### Misc #####
-.cache/
-.pytest_cache/
-.coverage
-htmlcov/
+# --- STREAMLIT ---
+.streamlit/cache/
+.streamlit/config.toml

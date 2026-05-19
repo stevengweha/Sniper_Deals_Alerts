@@ -1,47 +1,44 @@
-##### Smart Buy Sentinel - Infrastructure Gitignore #####
+##### Smart Buy Sentinel - Arborescence Officielle #####
 
 # --- SÉCURITÉ & SECRETS (CRITIQUE) ---
 .env
 *.env
-auth_*.json
 secrets/
 
-# --- DONNÉES / DATA (Garde la structure, ignore les fichiers de données) ---
-*.db
-*.sqlite
-/postgres_data/
-
-# Ignorer TOUS les fichiers de données n'importe où dans le projet
+# --- EXTENSIONS DE DONNÉES BANNIES (Partout dans le projet) ---
 *.csv
 *.json
 *.parquet
 *.avro
+*.db
+*.sqlite
 
-# --- PYTHON & JUPYTER ---
+# --- EXCLUSIONS SPÉCIFIQUES DE L'ARBORESCENCE ---
+
+# Python & System
 __pycache__/
-*.py[cod]
-*$py.class
+dags/__pycache__/
 .ipynb_checkpoints/
-.pytest_cache/
-.virtualenv/
-venv/
-ENV/
+*.py[cod]
 
-# --- APACHE AIRFLOW ---
+# Logs d'infrastructure
 *.log
 logs/
-/airflow/logs/
-/airflow/dags/__pycache__/
-airflow_webserver_config.pid
-airflow_config.py
+
+# Apache Airflow (Fichiers locaux racines)
+airflow-webserver.pid
+airflow.cfg
 webserver_config.py
 
-# --- dbt (DATA BUILD TOOL) ---
-target/
+# dbt Project (Ciblé dans ton vrai sous-dossier)
 dbt_project/target/
-dbt_modules/
-dbt_packages/
+dbt_project/logs/
+dbt_project/dbt_packages/
+dbt_project/dbt_modules/
 
-# --- STREAMLIT ---
+# Streamlit Cache
+streamlit-app/.streamlit/
 .streamlit/cache/
-.streamlit/config.toml
+
+# Base de données persistante locale Docker (si applicable)
+/postgres_data/

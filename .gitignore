@@ -6,9 +6,7 @@
 secrets/
 
 # --- DONNÉES BRUTES & TRAITÉES (À NE JAMAIS PUSHER) ---
-data/
-!data/.gitkeep
-!data/README.md
+
 
 # --- DBT TARGET & LOGS (À NE JAMAIS PUSHER) ---
 dbt_project/target/

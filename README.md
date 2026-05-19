@@ -1,6 +1,6 @@
 # 🎯 Smart Buy Sentinel - Architecture Pipeline Complet
 
-![Smart Buy Sentinel Pipeline](pipeline.jpeg)
+![Smart Buy Sentinel Pipeline](Pipeline.jpeg)
 
 ---
 

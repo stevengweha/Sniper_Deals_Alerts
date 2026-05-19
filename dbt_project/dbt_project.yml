@@ -1,0 +1,36 @@
+name: 'smart_buy'
+version: '1.0.0'
+config-version: 2
+
+profile: 'smart_buy'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+seeds:
+  smart_buy:
+    shopping:
+      +schema: shopping
+      +tags: ['shopping']
+    transport-train:
+      +schema: transport
+      +tags: ['transport']
+
+models:
+  smart_buy: 
+    shopping:
+      +schema: shopping
+      +materialized: table
+      +tags: ['shopping']
+    transport-train:
+      +schema: transport
+      +materialized: table
+      +tags: ['transport']

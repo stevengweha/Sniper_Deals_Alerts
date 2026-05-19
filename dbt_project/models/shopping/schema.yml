@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: raw_data
+    database: smart_buy_db
+    schema: public
+    tables:
+      - name: raw_ebay      
+      - name: raw_leboncoin 
+      - name: raw_amazon 
+      - name: raw_cashexpress

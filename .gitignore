@@ -1,0 +1,28 @@
+##### security GitHub repository #####
+# This .gitignore file is used to specify which files and directories should be ignored by Git
+
+# ignore .env file which contains sensitive information
+.env
+
+# ignore Python bytecode files
+__pycache__/
+
+# ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+# ignore Streamlit cache directory
+.streamlit/cache/
+# ignore log files
+*.log
+logs/
+# ignore database files
+*.db
+
+#Dbt ignore target directory
+dbt_projet/target/
+
+# IGNORE data/processed
+data/processed/
+
+webserver_config.py
+airflow_config.py
+airflow_webserver_config.pid

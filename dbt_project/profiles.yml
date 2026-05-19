@@ -1,0 +1,12 @@
+smart_buy:
+  outputs:
+    dev:
+      type: postgres
+      host: postgres_data 
+      user: admin
+      password: admin
+      port: 5432
+      dbname: smart_buy_db
+      schema: public
+      threads: 4
+  target: dev

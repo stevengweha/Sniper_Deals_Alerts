@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: transport
+    database: smart_buy_db
+    schema: public
+    tables:
+      - name: raw_sncf_regularite
+        description: "Données de ponctualité TGV (CSV)"
+      - name: raw_sncf_frequentation
+        description: "Données de flux voyageurs (JSON)"

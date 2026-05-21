@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-// Importe ta fonction de connexion DB
-import { connectDB } from '@/lib/mongodb' 
+import { connectDB } from '@/lib/mongodb';
 import User from '@/models/User';
 
 const WEB_APP_URL = "https://sniper-deals-alerts.vercel.app";
@@ -9,10 +8,17 @@ export async function POST(req: Request) {
   const body = await req.json();
   const { message } = body;
 
+  // Si le webhook reçoit autre chose qu'un message (ex: edited_message), on ignore
   if (!message) return NextResponse.json({ status: 'ok' });
 
   const chatId = message.chat.id;
-  const user = message.from; // C'est ici que tu as l'ID, username, etc.
+  // On récupère les infos de l'utilisateur s'il s'agit d'un message privé,
+  // sinon on prend les infos du groupe/canal
+  const chatInfo = {
+    id: chatId,
+    username: message.from?.username || message.chat.title || 'Inconnu',
+    firstName: message.from?.first_name || message.chat.title || 'Groupe/Canal'
+  };
   const text = message.text;
 
   const inlineKeyboard = {
@@ -21,9 +27,10 @@ export async function POST(req: Request) {
     ]]
   };
 
-  if (text === '/start') {
-    // 1. Sauvegarde directe dans MongoDB depuis le serveur
-    await saveUserToDb(user);
+  // Gestion du /start (fonctionne aussi en groupe avec /start@NomDuBot)
+  if (text && text.startsWith('/start')) {
+    // 1. Sauvegarde/Mise à jour en base
+    await saveChatToDb(chatInfo);
 
     // 2. Réponse Telegram
     await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -40,24 +47,27 @@ export async function POST(req: Request) {
   return NextResponse.json({ status: 'ok' });
 }
 
-// Fonction Serveur pour MongoDB
-// Fonction Serveur pour MongoDB
-async function saveUserToDb(user: any) {
+/**
+ * Enregistre ou met à jour le chat (User, Groupe ou Canal) en base de données
+ */
+async function saveChatToDb(chatInfo: any) {
   try {
-    await connectDB(); // Assure la connexion
+    await connectDB();
     
     await User.findOneAndUpdate(
-      { telegramId: user.id },
+      { telegramId: chatInfo.id }, // Utilise l'ID unique du chat (négatif pour groupes)
       { 
-        username: user.username, 
-        firstName: user.first_name,
-        lastSeen: new Date()
+        $set: {
+          username: chatInfo.username, 
+          firstName: chatInfo.firstName,
+          lastSeen: new Date()
+        }
       },
-      { upsert: true, new: true } // Upsert gère la création ou la mise à jour
+      { upsert: true, new: true }
     );
     
-    console.log(`✅ User ${user.id} synchronisé avec le modèle Mongoose.`);
+    console.log(`✅ Chat ${chatInfo.id} (${chatInfo.firstName}) synchronisé.`);
   } catch (error) {
-    console.error('❌ Erreur Mongoose :', error);
+    console.error('❌ Erreur Mongoose lors de la synchronisation :', error);
   }
 }

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 // Importe ta fonction de connexion DB
 import { connectDB } from '@/lib/mongodb' 
 
-const WEB_APP_URL = "https://ton-site.vercel.app";
+const WEB_APP_URL = "https://sniper-deals-alerts.vercel.app";
 
 export async function POST(req: Request) {
   const body = await req.json();

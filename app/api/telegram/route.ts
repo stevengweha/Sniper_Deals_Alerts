@@ -8,54 +8,65 @@ export async function POST(req: Request) {
   const body = await req.json();
   const { message } = body;
 
-  // Si le webhook reçoit autre chose qu'un message (ex: edited_message), on ignore
   if (!message) return NextResponse.json({ status: 'ok' });
 
   const chatId = message.chat.id;
-  // On récupère les infos de l'utilisateur s'il s'agit d'un message privé,
-  // sinon on prend les infos du groupe/canal
   const chatInfo = {
     id: chatId,
     username: message.from?.username || message.chat.title || 'Inconnu',
     firstName: message.from?.first_name || message.chat.title || 'Groupe/Canal'
   };
-  const text = message.text;
+  const text = message.text || '';
 
-  const inlineKeyboard = {
-    inline_keyboard: [[
-      { text: "🚀 Ouvrir la Mini-App", web_app: { url: WEB_APP_URL } }
-    ]]
-  };
+  // 1. Sauvegarde systématique de tout chat qui interagit avec le bot
+  await saveChatToDb(chatInfo);
 
-  // Gestion du /start (fonctionne aussi en groupe avec /start@NomDuBot)
-  if (text && text.startsWith('/start')) {
-    // 1. Sauvegarde/Mise à jour en base
-    await saveChatToDb(chatInfo);
-
-    // 2. Réponse Telegram
-    await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: "Bienvenue ! Je t'enverrai les meilleures opportunités ici.",
-        reply_markup: inlineKeyboard
-      })
-    });
+  // 2. Gestion des commandes
+  // Détection du /start classique OU du /start app (venant de notre Deep Link)
+  if (text.startsWith('/start')) {
+    
+    // Si l'utilisateur vient d'un groupe via le lien "Lancer la Mini-App"
+    if (text === '/start app') {
+      await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: "C'est parti ! Voici ta Mini-App :",
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "🚀 Ouvrir la Mini-App", web_app: { url: WEB_APP_URL } }
+            ]]
+          }
+        })
+      });
+    } 
+    // Sinon : Accueil standard
+    else {
+      await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: "Bienvenue ! Je t'enverrai les meilleures opportunités ici.",
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "🚀 Ouvrir la Mini-App", web_app: { url: WEB_APP_URL } }
+            ]]
+          }
+        })
+      });
+    }
   }
 
   return NextResponse.json({ status: 'ok' });
 }
 
-/**
- * Enregistre ou met à jour le chat (User, Groupe ou Canal) en base de données
- */
 async function saveChatToDb(chatInfo: any) {
   try {
     await connectDB();
-    
     await User.findOneAndUpdate(
-      { telegramId: chatInfo.id }, // Utilise l'ID unique du chat (négatif pour groupes)
+      { telegramId: chatInfo.id },
       { 
         $set: {
           username: chatInfo.username, 
@@ -65,9 +76,8 @@ async function saveChatToDb(chatInfo: any) {
       },
       { upsert: true, new: true }
     );
-    
-    console.log(`✅ Chat ${chatInfo.id} (${chatInfo.firstName}) synchronisé.`);
+    console.log(`✅ Chat ${chatInfo.id} synchronisé.`);
   } catch (error) {
-    console.error('❌ Erreur Mongoose lors de la synchronisation :', error);
+    console.error('❌ Erreur Mongoose :', error);
   }
 }

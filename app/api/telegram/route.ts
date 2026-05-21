@@ -43,24 +43,20 @@ export async function POST(req: Request) {
 // Fonction Serveur pour MongoDB
 async function saveUserToDb(user: any) {
   try {
-    const db = await connectDB(); // Utilise ta fonction connectDB() importée
+    await connectDB(); // Assure la connexion
     
-    // On utilise updateOne avec { upsert: true } pour créer l'utilisateur 
-    // s'il n'existe pas, ou mettre à jour ses infos s'il existe déjà.
-    await db.collection('users').updateOne(
+    await user.findOneAndUpdate(
       { telegramId: user.id },
       { 
-        $set: { 
-          username: user.username || 'unknown', 
-          firstName: user.first_name || 'utilisateur',
-          lastSeen: new Date()
-        } 
+        username: user.username, 
+        firstName: user.first_name,
+        lastSeen: new Date()
       },
-      { upsert: true }
+      { upsert: true, new: true } // Upsert gère la création ou la mise à jour
     );
     
-    console.log(`✅ User ${user.id} synchronisé en base.`);
+    console.log(`✅ User ${user.id} synchronisé avec le modèle Mongoose.`);
   } catch (error) {
-    console.error('❌ Erreur lors de la sauvegarde utilisateur :', error);
+    console.error('❌ Erreur Mongoose :', error);
   }
 }

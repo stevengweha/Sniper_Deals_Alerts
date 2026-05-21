@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 // Importe ta fonction de connexion DB
 import { connectDB } from '@/lib/mongodb' 
+import User from '@/models/User';
 
 const WEB_APP_URL = "https://sniper-deals-alerts.vercel.app";
 
@@ -45,7 +46,7 @@ async function saveUserToDb(user: any) {
   try {
     await connectDB(); // Assure la connexion
     
-    await user.findOneAndUpdate(
+    await User.findOneAndUpdate(
       { telegramId: user.id },
       { 
         username: user.username, 

@@ -9,6 +9,7 @@ USER airflow
 # Installation des connecteurs
 RUN pip install --no-cache-dir \
     apache-airflow-providers-apache-spark==4.0.0 \
+    pymongo \
     psycopg2-binary \
     pyspark==3.5.0\
     dbt-postgres \

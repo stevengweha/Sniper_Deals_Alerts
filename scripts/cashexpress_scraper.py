@@ -7,8 +7,43 @@ from bs4 import BeautifulSoup
 from curl_cffi import requests
 import random
 
-def scrape_cashexpress_exact(keyword, target_count):
-    print(f"🎯 [VRAIE STRUCTURE] Extraction via Cash Express pour : {keyword}")
+# CONFIGURATION DES ROUTES CHIRURGICALES
+# Tu peux ajouter autant de catégories et de marques que tu veux ici
+SCRAPING_ROUTES = {
+    "iphone": {
+        "url_template": "https://www.cashexpress.fr/produits-occasions/telephonie-mobile,40/iphone,1001/page,{offset}.html",
+        "category": "SMARTPHONE",
+        "brand": "APPLE"
+    },
+    "playstation": {
+        "url_template": "https://www.cashexpress.fr/produits-occasions/console-sony,53/page,{offset}.html",
+        "category": "CONSOLE",
+        "brand": "SONY"
+    },
+    "xbox": {
+        "url_template": "https://www.cashexpress.fr/produits-occasions/console-microsoft,58/page,{offset}.html",
+        "category": "CONSOLE",
+        "brand": "MICROSOFT"
+    },
+    "samsung": {
+        "url_template": "https://www.cashexpress.fr/produits-occasions/telephonie-mobile,40/samsung,1002/page,{offset}.html",
+        "category": "SMARTPHONE",
+        "brand": "SAMSUNG"
+    },
+    "laptop": {
+        "url_template": "https://www.cashexpress.fr/produits-occasions/ordinateur-portable,36/page,{offset}.html",
+        "category": "ORDINATEUR",
+        "brand": "laptop"
+    }
+}
+
+def scrape_cashexpress_category(route_key, target_count):
+    config = SCRAPING_ROUTES.get(route_key.lower())
+    if not config:
+        print(f"❌ Aucune route configurée pour la clé : {route_key}")
+        return
+
+    print(f"🎯 [ROUTAGE PAR CATÉGORIE] Extraction : {config['category']} | Marque : {config['brand']}")
     all_items = []
     
     headers = {
@@ -17,14 +52,13 @@ def scrape_cashexpress_exact(keyword, target_count):
         "Accept-Language": "fr-FR,fr;q=0.9"
     }
     
-    # On commence à la page 1 (offset 0)
     current_page = 1
     
     with requests.Session(impersonate="chrome120") as session:
         while len(all_items) < target_count:
-            # Calcul exact de l'offset basé sur : (Page - 1) * 16
+            # Calcul de l'offset exigé par l'URL Cash Express (0, 16, 32...)
             offset = (current_page - 1) * 16
-            url = f"https://www.cashexpress.fr/produits-occasions/page,{offset}.html?recherche={keyword}"
+            url = config["url_template"].format(offset=offset)
             
             print(f"📡 Requête Page {current_page} (Offset {offset}) -> {url}")
             
@@ -35,12 +69,10 @@ def scrape_cashexpress_exact(keyword, target_count):
                     break
                 
                 soup = BeautifulSoup(response.text, 'html.parser')
-                
-                # Ciblage strict du conteneur 
                 product_cards = soup.find_all("div", class_="item_produit_magasin")
                 
                 if not product_cards:
-                    print("🏁 Aucun produit trouvé sur cette page. Fin de l'index.")
+                    print("🏁 Aucun produit trouvé sur cette page. Fin du catalogue.")
                     break
                 
                 items_found_this_page = 0
@@ -48,46 +80,41 @@ def scrape_cashexpress_exact(keyword, target_count):
                     if len(all_items) >= target_count:
                         break
                     
-                    # 1. Extraction du Titre et de l'URL via le H3 > A du snippet
+                    # 1. Extraction du Titre et de l'URL
                     h3_element = card.find("h3")
-                    if not h3_element:
-                        continue
+                    if not h3_element: continue
                         
                     a_element = h3_element.find("a")
-                    if not a_element:
-                        continue
+                    if not a_element: continue
                         
                     title = a_element.text.strip().upper()
                     href = a_element.get("href", "")
                     url_product = f"https://www.cashexpress.fr{href}"
                     
-                    # Filtre de sécurité pour éviter les accessoires
+                    # Filtre de sécurité basique (conservé mais dbt fera le gros du travail)
                     if any(p in title.lower() for p in ["telecommande", "support", "cable", "fixation"]):
                         continue
                     
                     # 2. Extraction du Prix 
                     price_element = card.find("span", class_="prix")
-                    if not price_element:
-                        continue
-                    price_raw = price_element.text.strip() # Récupère "69.99 €"
+                    if not price_element: continue
+                    price_raw = price_element.text.strip()
                     
-                    # 3. État sémantique (Le site étant 100% occasion, on garde "Occasion")
-                    etat = "Occasion"
-
+                    # Enclenchement du payload enrichi
                     all_items.append({
                         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "keyword": keyword,
+                        "source": "CASH_EXPRESS",
+                        "injected_category": config["category"],  # VALEUR AJOUTÉE SPARK
+                        "injected_brand": config["brand"],        # VALEUR AJOUTÉE SPARK
                         "title": title,
                         "price_raw": price_raw,
-                        "etat": etat,
                         "url": url_product
                     })
                     items_found_this_page += 1
                 
-                print(f"📊 Page {current_page} complétée : +{items_found_this_page} lignes (Total : {len(all_items)}/{target_count})")
+                print(f"📊 Page {current_page} complétée : +{items_found_this_page} lignes ({len(all_items)}/{target_count})")
                 
                 if items_found_this_page == 0:
-                    print("🏁 Les structures sont vides. Arrêt.")
                     break
                     
                 current_page += 1
@@ -97,29 +124,29 @@ def scrape_cashexpress_exact(keyword, target_count):
                 print(f"💥 Incident de parsing sur la page {current_page} : {e}")
                 break
 
-    # Écriture finale dans le volume d'ingestion dbt / Airflow
+    # Écriture dans ton volume Docker /data
     if all_items:
         df = pd.DataFrame(all_items)
         output_dir = "/opt/airflow/data/raw/shopping"
         os.makedirs(output_dir, exist_ok=True)
         
-        filename = f"cashexpress_{keyword.lower()}.csv"
+        filename = f"cashexpress_{route_key.lower()}.csv"
         full_path = os.path.join(output_dir, filename)
         
         df.to_csv(full_path, index=False, encoding='utf-8')
-        print(f"✨ [SUCCÈS] {len(df)} lignes réelles générées dans : {full_path}")
-        
+        print(f"✨ [SUCCÈS] {len(df)} lignes générées dans : {full_path}")
     else:
-        print("❌ Aucune donnée n'a pu être extraite.")
-        sys.exit(0)
+        print(f"❌ Aucune donnée pour la route : {route_key}")
 
 if __name__ == "__main__":
-    input_str = sys.argv[1] if len(sys.argv) > 1 else "playstation"
-    queries = [q.strip() for q in input_str.split(',')]
+    # Permet de passer des routes en arguments (ex: python script.py iphone,ps5)
+    input_str = sys.argv[1] if len(sys.argv) > 1 else "iphone,playstation,xbox,samsung,laptop"
+    routes_to_run = [r.strip() for r in input_str.split(',')]
     
-    for query in queries:
-        scrape_cashexpress_exact(query, target_count=500)
-        # Pause aléatoire entre chaque mot-clé pour éviter le bannissement
-        sleep_between_queries = random.uniform(30, 60)
+    for route in routes_to_run:
+        scrape_cashexpress_category(route, target_count=500)
+        
+        # Pause de sécurité anti-ban
+        sleep_between_queries = random.uniform(20, 40)
         print(f"💤 Pause de sécurité de {int(sleep_between_queries)}s...")
         time.sleep(sleep_between_queries)

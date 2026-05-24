@@ -1,27 +1,29 @@
+{{ config(materialized='view') }}
+
+WITH source_data AS (
+    SELECT
+        timestamp,
+        ingested_at,
+        LOWER(TRIM(source)) AS source_name,
+        LOWER(TRIM(category)) AS category,
+        LOWER(TRIM(brand)) AS brand,
+        TRIM(title) AS title,
+        price_cleaned AS price,
+        TRIM(url) AS url
+    FROM {{ source('raw_data', 'raw_leboncoin') }}
+    WHERE title IS NOT NULL
+      AND price_cleaned IS NOT NULL 
+      AND price_cleaned > 0
+)
+
 SELECT
-    ingested_at AS timestamp,
-    'leboncoin' AS source,
-    search_keyword,
+    timestamp,
+    ingested_at,
+    source_name AS source, -- 🟢 Maintenant "source_name" existe bien car on lit depuis "source_data" !
+    category,
+    brand,
     title,
-    CAST(NULL AS TEXT) AS product_brand,
-    CAST(
-        NULLIF(
-            -- 1. On garde uniquement les chiffres, les points et les virgules
-            -- 2. On transforme toutes les virgules en points
-            -- 3. On extrait la chaîne de caractères qui ressemble à un nombre décimal 
-            -- (ex: 1234.56) en supprimant tout point surnuméraire
-            REGEXP_REPLACE(
-                REPLACE(
-                    REGEXP_REPLACE(price_raw, '[^0-9,.]', '', 'g'), 
-                ',', '.'),
-                '(?<=\..*)\.', '', 'g' -- Supprime les points supplémentaires après le premier
-            ),
-            ''
-        ) AS DOUBLE PRECISION
-    ) AS price,
-    'Occasion' AS etat,
+    price,
+    'Occasion' AS product_condition,
     url
-FROM {{ source('raw_data', 'raw_leboncoin') }}
--- On exclut tout ce qui n'est pas un prix ou une donnée exploitable
-WHERE price_raw NOT LIKE 'Annonce à la une%'
-  AND price_raw ~ '[0-9]'
+FROM source_data -- 👈 C'est ici qu'était le bug ! On appelle la CTE, pas la source brute

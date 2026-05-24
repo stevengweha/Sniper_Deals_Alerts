@@ -44,6 +44,10 @@ services:
       - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY}
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - TZ=Europe/Paris
+      - POSTGRES_USER=${POSTGRES_DB_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_DB_PASSWORD}
+      - MONGODB_URI=${MONGODB_URI}
+      - AIRFLOW_CONN_POSTGRES_DATA=${DB_URL}
     ports:
       - "8081:8080"
     volumes:
@@ -65,8 +69,12 @@ services:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@airflow-db/airflow
       - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY}
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - POSTGRES_USER=${POSTGRES_DB_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_DB_PASSWORD}
+      - MONGODB_URI=${MONGODB_URI}
+      - AIRFLOW_CONN_POSTGRES_DATA=${DB_URL}
       
-      - DB_UTL=${DB_URL}
+      - DB_URL=${DB_URL}
       # Variables pour ton bot
       - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}

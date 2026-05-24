@@ -1,306 +1,398 @@
 {{ config(materialized='view') }}
 
-with unified_staging as (
-    select timestamp, source, search_keyword, title, product_brand, price, etat, url from {{ ref('stg_ebay') }}
-    union all
-    select timestamp, source, search_keyword, title, product_brand, price, etat, url from {{ ref('stg_leboncoin') }}
-    union all
-    select timestamp, source, search_keyword, title, product_brand, price, etat, url from {{ ref('stg_cashexpress') }}
+WITH unified_staging AS (
+    SELECT * FROM {{ ref('stg_cashexpress') }}
+    UNION ALL
+    SELECT * FROM {{ ref('stg_leboncoin') }}
+    UNION ALL
+    SELECT * FROM {{ ref('stg_ebay') }}
 ),
 
-rules as (
-    select * from {{ ref('mapping_sub_categories') }}
-),
-
--- Jointure sémantique avec PRIORITÉ numérique
-matched_rules as (
-    select
-        u.*,
-        coalesce(r.target_sub_category, null) as target_sub_category,
-        coalesce(r.pattern_type, 'generic') as pattern_type,
-        coalesce(r.priority, 99) as priority,
-        row_number() over(
-            partition by u.title, u.source, u.timestamp, u.price 
-            order by coalesce(r.priority, 99) asc
-        ) as rule_rank
-    from unified_staging u
-    left join rules r
-        on lower(u.title) like '%' || lower(r.keyword) || '%'
-),
-
--- ÉTAPE 1 : Génération de sub_category
-sub_category_generation as (
-    select
+-- ====================================================================
+-- 1. ÉTAPE INTERMÉDIAIRE : REDRESSEMENT DES MARQUES ET CATÉGORIES
+-- ====================================================================
+refined_base AS (
+    SELECT
         timestamp,
+        ingested_at,
         source,
-        search_keyword,
         title,
-        product_brand,
         price,
-        etat,
+        product_condition,
         url,
-        case
-            -- ========== LAYER 1: HARDCODED HIGH-PRIORITY PATTERNS ==========
-            -- Smartphones par marque (plus spécifique que les accessoires)
-            when lower(title) like '%xiaomi%' and lower(title) like '%redmi%' then '📱 Smartphone'
-            when lower(title) like '%xiaomi%' then '📱 Smartphone'
-            when lower(title) like '%oppo%' then '📱 Smartphone'
-            when lower(title) like '%realme%' then '📱 Smartphone'
-            when lower(title) like '%nokia%' then '📱 Smartphone'
-            when lower(title) like '%honor%' then '📱 Smartphone'
-            when lower(title) like '%huawei%' then '📱 Smartphone'
-            when lower(title) like '%motorola%' then '📱 Smartphone'
-            when lower(title) like '%wiko%' then '📱 Smartphone'
-            when lower(title) like '%sony xperia%' then '📱 Smartphone'
-            when lower(title) like '%doro%' then '📱 Smartphone'
-            when lower(title) like '%logicom%' then '📱 Smartphone'
-            when lower(title) like '%polaroid%' then '📱 Smartphone'
-            when lower(title) like '%neow%' then '📱 Smartphone'
-            when lower(title) like '%c50s%' then '📱 Smartphone'
-            when lower(title) like '%poco%' then '📱 Smartphone'
-            when lower(title) like '%redmi%' then '📱 Smartphone'
-            when lower(title) like '%mi 9%' then '📱 Smartphone'
-            when lower(title) like '%mi 11%' then '📱 Smartphone'
-            when lower(title) like '%blackview%' then '📱 Smartphone'
-            when lower(title) like '%alcatel%' then '📱 Smartphone'
-            when lower(title) like '%lg%' and lower(title) like '%k%' then '📱 Smartphone'
-            when lower(title) like '%tcl%' then '📱 Smartphone'
-            when lower(title) like '%htc%' then '📱 Smartphone'
-            when lower(title) like '%zte%' then '📱 Smartphone'
-            when lower(title) like '%orange%' then '📱 Smartphone'
-            when lower(title) like '%altice%' then '📱 Smartphone'
-            when lower(title) like '%doogee%' then '📱 Smartphone'
-            when lower(title) like '%danew%' then '📱 Smartphone'
-            when lower(title) like '%staraddict%' then '📱 Smartphone'
-            when lower(title) like '%crosscall%' then '📱 Smartphone'
-            when lower(title) like '%oneplus%' then '📱 Smartphone'
-            when lower(title) like '%thomson%' then '📱 Smartphone'
-            when lower(title) like '%evertek%' then '📱 Smartphone'
-            when lower(title) like '%freeyond%' then '📱 Smartphone'
-            when lower(title) like '%google pixel%' then '📱 Smartphone'
-            
-            -- Consoles spécifiques (avant accessoires)
-            when lower(title) like '%nintendo ds lite%' then '🕹️ Console Nintendo DS'
-            when lower(title) like '%nintendo ds%' then '🕹️ Console Nintendo DS'
-            when lower(title) like '%nintendo 2ds%' then '🕹️ Console Nintendo 2DS'
-            when lower(title) like '%nintendo 3ds%' then '🕹️ Console Nintendo 3DS'
-            when lower(title) like '%nintendo dsi%' then '🕹️ Console Nintendo DSi'
-            when lower(title) like '%nintendo wii%' then '🕹️ Console Nintendo Wii'
-            when lower(title) like '%sega megadrive%' or lower(title) like '%mega drive%' then '🕹️ Console Sega'
-            when lower(title) like '%sega saturn%' then '🕹️ Console Sega'
-            when lower(title) like '%sega dreamcast%' then '🕹️ Console Sega'
-            when lower(title) like '%sega master system%' then '🕹️ Console Sega'
-            when lower(title) like '%game gear%' then '🕹️ Console Sega'
-            when lower(title) like '%colecovision%' then '🕹️ Console Vintage'
-            when lower(title) like '%psone%' or lower(title) like '%ps1%' or lower(title) like '%ps 1%' then '🕹️ Console PS1'
-            when lower(title) like '%playstation classic%' then '🕹️ Console PS1'
-            when lower(title) like '%ps4 fat%' or lower(title) like '%ps4 1to%' then '🕹️ Console PS4'
-            when lower(title) like '%playstation 5%' then '🕹️ Console PS5'
-            when lower(title) like '%playstation 4%' then '🕹️ Console PS4'
-            when lower(title) like '%playstation 3%' then '🕹️ Console PS3'
-            when lower(title) like '%playstation 2%' then '🕹️ Console PS2'
-            when lower(title) like '%xbox 360%' then '🕹️ Console Xbox'
-            when lower(title) like '%arcade%' and lower(title) like '%console%' then '🕹️ Console Arcade'
-            when lower(title) like '%my arcade%' then '🕹️ Console Arcade'
-            when lower(title) like '%tiger%' and lower(title) like '%console%' then '🕹️ Console Vintage'
-            when lower(title) like '%atari%' then '🕹️ Console Atari'
-            when lower(title) like '%bingo%' and lower(title) like '%console%' then '🕹️ Console Vintage'
-            when lower(title) like '%gameboy%' or lower(title) like '%game boy%' then '🕹️ Console GameBoy'
-            when lower(title) like '%gameboy advance%' or lower(title) like '%game boy advance%' or lower(title) like '%gba%' then '🕹️ Console GameBoy'
-            when lower(title) like '%gameboy color%' or lower(title) like '%game boy color%' then '🕹️ Console GameBoy'
-            when lower(title) like '%nes%' then '🕹️ Console NES'
-            when lower(title) like '%snes%' or lower(title) like '%super nintendo%' or lower(title) like '%super famicom%' then '🕹️ Console SNES'
-            when lower(title) like '%famicom%' then '🕹️ Console NES'
-            when lower(title) like '%n64%' then '🕹️ Console N64'
-            when lower(title) like '%neo geo%' then '🕹️ Console Vintage'
-            when lower(title) like '%snk%' and lower(title) like '%pocket%' then '🕹️ Console Vintage'
-            when lower(title) like '%psp%' then '🕹️ Console PSP'
-            when lower(title) like '%acetronic%' then '🕹️ Console Vintage'
-            when lower(title) like '%bandai%' and lower(title) like '%console%' then '🕹️ Console Vintage'
-            when lower(title) like '%terror house%' then '🕹️ Console Vintage'
-            when lower(title) like '%texas instrument%' then '🕹️ Console Vintage'
-            when lower(title) like '%parachute%' and lower(title) like '%nintendo%' then '🕹️ Console Vintage'
-            when lower(title) like '%anbernic%' then '🕹️ Console Retro'
-            when lower(title) like '%rg40xx%' then '🕹️ Console Retro'
-            when lower(title) like '%amstrad%' then '🕹️ Console Vintage'
-            when lower(title) like '%lansay%' then '🕹️ Console Vintage'
-            when lower(title) like '%radicas%' then '🕹️ Console Vintage'
-            when lower(title) like '%liftlever%' then '🕹️ Console Vintage'
-            when lower(title) like '%mad monkey%' then '🕹️ Console Retro'
-            when lower(title) like '%fisher price%' then '🕹️ Console Enfant'
-            when lower(title) like '%vtech%' and lower(title) like '%console%' then '🕹️ Console Enfant'
-            
-            -- Meubles TV (patterns tele)
-            when lower(title) like '%console meuble%' or lower(title) like '%console de salon%' or lower(title) like '%console de rangement%' then '🪑 Meuble TV'
-            when lower(title) like '%meuble tv%' or lower(title) like '%meuble télé%' then '🪑 Meuble TV'
-            when lower(title) like '%bureau%' and lower(title) like '%console%' then '🪑 Meuble TV'
-            when lower(title) like '%secrétaire%' and lower(title) like '%console%' then '🪑 Meuble TV'
-            when lower(title) like '%coiffeuse%' and lower(title) like '%console%' then '🪑 Meuble TV'
-            when lower(title) like '%console en bois%' or lower(title) like '%console teck%' or lower(title) like '%console cannage%' then '🪑 Meuble TV'
-            when lower(title) like '%table console%' and lower(title) like '%télé%' then '🪑 Meuble TV'
-            when lower(title) like '%meuble%' and lower(title) like '%tv%' then '🪑 Meuble TV'
+        UPPER(category) AS raw_category,
+        UPPER(brand) AS raw_brand,
 
-            -- ========== LAYER 1-SPÉCIFIQUES: PATTERNS TRÈS SPÉCIFIQUES (AVANT LES PATTERNS GÉNÉRAUX) ==========
-            -- Jeux vidéo avec noms spécifiques
-            when lower(title) like '%anno 1800%' then '💿 Jeu Vidéo'
-            when lower(title) like '%planet coaster%' then '💿 Jeu Vidéo'
-            when lower(title) like '%planet zoo%' then '💿 Jeu Vidéo'
-            
-            -- Magazines TV
-            when lower(title) like '%tele poche%' or lower(title) like '%télé poche%' then '📰 Magazine Télé'
-            when lower(title) like '%tele pif%' or lower(title) like '%télé pif%' then '📰 Magazine Télé'
-            when lower(title) like '%tele loisirs%' or lower(title) like '%télé loisirs%' then '📰 Magazine Télé'
-            when lower(title) like '%tele star%' or lower(title) like '%télé star%' then '📰 Magazine Télé'
-            when lower(title) like '%tele 7 jours%' or lower(title) like '%télé 7 jours%' then '📰 Magazine Télé'
-                when lower(title) like '%tele 7%' or lower(title) like '%télé 7%' then '📰 Magazine Télé'
-                when lower(title) like '%tele magazine%' or lower(title) like '%télé magazine%' then '📰 Magazine Télé'
-                when lower(title) like '%tele revue%' or lower(title) like '%télé revue%' then '📰 Magazine Télé'
-            WHEN lower(title) ILIKE '%Télé%' AND lower(title) ILIKE '%Revue%'  AND lower(title) ILIKE '%Magazine%'  THEN '📰 Magazine TV'
-            
-            -- Accessoires consoles spécifiques (avant pattern PS5/Xbox général)
-            when lower(title) like '%telecomande%' or lower(title) like '%télécommande%' then '🎮 Accessoire Console'
-            when lower(title) like '%hdmi%' or lower(title) like '%port hdmi%' then '🔧 Service / Réparation'
-            
-            -- Casques et audio spécifiques
-            when lower(title) like '%casque%' and (lower(title) like '%jbl%' or lower(title) like '%filaire%') then '🎧 Casque Gaming'
-            
-            -- Accessoires consoles rétro
-            when lower(title) like '%housse%' and (lower(title) like '%pocket%' or lower(title) like '%taito%' or lower(title) like '%handheld%') then '🎮 Accessoire Console'
-            
-            -- Jouets enfants
-            when lower(title) like '%baby%' and lower(title) like '%smartphone%' then '🧸 Jouet Enfant'
-            when lower(title) like '%vtech%' and (lower(title) like '%toy%' or lower(title) like '%jouet%') then '🧸 Jouet Enfant'
-                when lower(title) like '%fisher price%' and (lower(title) like '%toy%' or lower(title) like '%jouet%') then '🧸 Jouet Enfant'
-                when lower(title) like '%lego%' then '🧸 Jouet Enfant'
-                when lower(title) like '%playmobil%' then '🧸 Jouet Enfant'
-                when lower(title) like '%poupée%' then '🧸 Jouet Enfant'
-                when lower(title) like '%peluche%' then '🧸 Jouet Enfant'
-                when lower(title) like '%jouet%' or lower(title) like '%toy%' then '🧸 Jouet Enfant'
+        -- A. Redressement strict de la marque (Nettoyage des erreurs de saisie type Wii chez Sony)
+        CASE 
+            WHEN UPPER(title) ~* '(IPHONE|APPLE|MACBOOK|AIRPOD)' THEN 'APPLE'
+            WHEN UPPER(title) ~* '(GALAXY|SAMSUNG)' THEN 'SAMSUNG'
+            WHEN UPPER(title) ~* '(PLAYSTATION|PLAY\s+STATION|PS5|PS4|PS3|PS2|PS1|PSP|SONY)' THEN 'SONY'
+            WHEN UPPER(title) ~* '(NINTENDO|SWITCH|WII)' THEN 'NINTENDO'
+            WHEN UPPER(title) ~* '(XBOX|MICROSOFT)' THEN 'MICROSOFT'
+            WHEN UPPER(title) ~* 'THRUSTMASTER' THEN 'THRUSTMASTER'
+            WHEN UPPER(title) ~* 'LOGITECH' THEN 'LOGITECH'
+            ELSE UPPER(brand)
+        END AS refined_brand,
 
-            -- Instruments de musique
-            when lower(title) like '%guitare%' and (lower(title) like '%electrique%' or lower(title) like '%acoustique%') then '🎸 Instrument'
-            when lower(title) like '%piano%' then '🎸 Instrument '
-            when lower(title) like '%batterie%' and (lower(title) like '%instrument%' or lower(title) like '%musique%') then '🎸 Instrument '
-            when lower(title) like '%violon%' then '🎸 Instrument '
-            when lower(title) like '%saxophone%' then '🎸 Instrument '
-            when lower(title) like '%flute%' then '🎸 Instrument '
-            when lower(title) like '%clarinette%' then '🎸 Instrument '
-            when lower(title) like '%harmonica%' then '🎸 Instrument '
-            when lower(title) like '%accordéon%' then '🎸 Instrument '
+        -- B. Redressement de la catégorie basé sur le contenu réel de l'annonce
+        CASE 
+            -- Pièces détachées pures
+            WHEN UPPER(title) ~* '(NAPPE|CHASSIS|CHÂSSIS|CARTE MERE|CARTE MÈRE|PIECE|PIÈCE|COMPOSANT|OBJECTIF|TIROIR|VITRE|LECTEUR.*SIM|ANTENNE|MODULE|HAUT PARLEUR|CAMERA|CAMÉRA|CONNECTEUR|POUR PIECE|POUR PIÈCE|ECRAN|ÉCRAN|CHERCHE TOUR| APPAREIL PHOTO ARRIERE|APPAREIL PHOTO ARRIÈRE|BATTERIE IPHONE 17 |CAPTEUR)' 
+                 AND NOT UPPER(title) ~* '(RECONDITIONNÉ|DEBLOQUÉ|DÉBLOQUÉ|16GO|32GO|64GO|128GO|256GO|512GO|GIGA)'
+                THEN 'PIECE DETACHEE'
 
-            -- aide pour console extract console sony xperia et smartphone sony
-            when lower(title) like '%sony%' and lower(title) like '%xperia%' then '📱 Smartphone'
-            when lower(title) like '%sony%' and lower(title) like '%console%' then '🕹️ Console playstation'
-            
-        
-        
-             
-        -- 4. PRIORITÉ : Tout ce qui est accessoire
-        WHEN lower(title) ~* '(pièce|coque|etui|chargeur|cable|brassard|accessoire|pochette|support|vitre|film|Remplacement)' 
-         THEN '🔌 Accessoire  tech'
+            -- Boîtes vides (Toujours des accessoires)
+            WHEN UPPER(title) ~* '(BOITE VIDE|BOÎTE VIDE|BOITIER VIDE|BOÎTIER VIDE|BOÎTE)'
+                THEN 'ACCESSOIRE'
 
+            -- Forçage SMARTPHONE : Vrais téléphones ou packs complets (Même si l'annonce liste des accessoires fournis)
+            WHEN (UPPER(title) ~* '(IPHONE|GALAXY|SMARTPHONE)' OR UPPER(title) ~* 'SAMSUNG\s*([SAZ]|A\s*\d+)')
+                 AND NOT UPPER(title) ~* '(COQUE\s+SEULE|VITRE\s+SEULE|CHARGEUR\s+SEUL|CABLE\s+SEUL)'
+                 AND (price > 25 OR UPPER(title) ~* '(RECONDITIONNÉ|DEBLOQUÉ|DÉBLOQUÉ|16GO|32GO|64GO|128GO|256GO|512GO|GIGA)')
+                THEN 'SMARTPHONE'
 
+            -- Forçage CONSOLE : Détection des machines (Modernes et Rétro sous les 40€ sauvées)
+            WHEN (UPPER(title) ~* '(PLAYSTATION|PLAY\s+STATION|PS5|PS4|PS3|PS2|PS1|PS\s*ONE|PSONE|XBOX|SWITCH|WII|PSP)' OR UPPER(title) LIKE '%CONSOLE%')
+                 AND NOT UPPER(title) ~* '(MANETTE\s+SEULE|COQUE\s+SEULE|HOUSSE\s+SEULE|BATTERIE\s+SEULE|SUPPORT\s+SEUL|CHARGEUR\s+SEUL|JEU\s+SEUL|CÂBLE\s+SEUL|CABLE\s+SEUL|ACCESSOIRE\s+SEUL)'
+                 AND (price > 15 OR UPPER(title) LIKE '%CONSOLE%')
+                THEN 'CONSOLE'
 
-            -- ========== LAYER 1.5: INTERCEPTION DES PACKS & FAUX AMIS ==========
-            when search_keyword in ('tele', 'tv') and lower(title) like '%meuble%' and (lower(title) like '%télé%' or lower(title) like '%tv%') then '📺 Pack TV + Meuble'
-            when lower(title) like '%big box%' or lower(title) like '%cd-rom%' then '💿 Jeu Vidéo'
-            when lower(title) like '%pc engine%' or lower(title) like '%coregrafx%' or lower(title) like '%turbo express%' then '🕹️ Console Retro'
-            when lower(title) like '%ordinateur de bord%' or lower(title) like '%tableau de bord%' or lower(title) like '%compteur%' then '🚗 Pièce Automobile'
-            when lower(title) like '%msi claw%' or lower(title) like '%steam deck%' or lower(title) like '%rog ally%' then '🕹️ Console Retro'
+            -- Jeux et Accessoires Standards
+            WHEN UPPER(title) ~* '(MANETTE|COQUE|CHARGEUR|CABLE|CÂBLE|SUPPORT|ECOUTEUR|ÉCOUTEUR|BATTERIE|CASQUE|OREILLETTE|VOLANT|PEDALE|SOURIS|CLAVIER|STYLET|STYLLET|AIRPOD|COLLECTOR|EDITION|ÉDITION|JEU\s+CONSOLE|BLU\s*RAY|JEUX|GAME|JEU SONY|JEU MICROSOFT|JEU NINTENDO|JEU XBOX|JEU PS4|JEU PS5|JEU PS3|JEU PS2|JEU PS1|JEU PSP|GEARS OF WAR |FORZA|FIFA|CALL OF DUTY|MARIO|ZELDA|POKEMON|ANIMAL CROSSING|LEGO|GRAND THEFT AUTO|GTA|RED DEAD REDEMPTION|RDR|ASSASSINS CREED|BATTLEFIELD|HALO|OVERWATCH|DESTINY|FORTNITE|ROCKET LEAGUE|RAINBOW SIX|SIEGE|MINECRAFT|CYBERPUNK|WITCHER|FALLOUT|ELDEN RING|BLOODBORNE|DARK SOULS|RESIDENT EVIL|BIOHAZARD|GRAN TURISMO|GTAV?|SPIDER-MAN|MARVEL|DC\s*COMICS|LEGO|DISNEY)' 
+                THEN 'ACCESSOIRE'
             
-            -- ========== LAYER 2: RULE-BASED MATCHING (CSV) ==========
-            when target_sub_category is not null and rule_rank = 1 then target_sub_category
-            
-            -- ========== LAYER 3: SMART FALLBACKS ET ANTI-POLLUTION ==========
-            when lower(title) like '%annonce %' 
-              or lower(title) like '%lot %' 
-              or lower(title) like '%divers%' 
-              or lower(title) like '%a la une%' 
-              or lower(title) like '%vide%' 
-              or lower(title) like '%vends%' then '📦 Annonce Divers / Lots'
-            
-            when lower(title) like '%télé loisirs%' or lower(title) like '%tele loisirs%' then '📰 Magazine TV'
-            when lower(title) like '%télé poche%' or lower(title) like '%tele poche%' then '📰 Magazine TV'
-            when lower(title) like '%télé star%' or lower(title) like '%tele star%' then '📰 Magazine TV'
-            when lower(title) like '%télé 7 jours%' or lower(title) like '%tele 7 jours%' then '📰 Magazine TV'
-            when lower(title) like '%telecaster%' then '🎸 Instrument Musique'
+            ELSE UPPER(category) 
+        END AS refined_category,
 
-            when lower(title) like '%jeu%' or lower(title) like '%jeux%' then '💿 Jeu Vidéo'
-            when lower(title) like '%accessoire%' or lower(title) like '%accessories%' then '🎮 Accessoire Console'
-            when lower(title) like '%telecommande%' or lower(title) like '%télécommande%' then '🎮 Accessoire Console'
-            when lower(title) like '%manette%' or lower(title) like '%controller%' then '🎮 Accessoire Console'
-            when lower(title) like '%reparation%' or lower(title) like '%réparation%' or lower(title) like '%hdmi%' then '🔧 Service / Réparation'
-            when lower(title) like '%boite seule%' or lower(title) like '%boîte seule%' or lower(title) like '%housse%' then '🎮 Accessoire Console'
-            
-            when lower(title) like '%support%' and lower(title) like '%smartphone%' then '🔌 Accessoire Smartphone'
-            when lower(title) like '%étui%' and lower(title) like '%smartphone%' then '🔌 Accessoire Smartphone'
-            when lower(title) like '%coque%' and lower(title) like '%smartphone%' then '🔌 Accessoire Smartphone'
-            when lower(title) like '%câble%' and lower(title) like '%smartphone%' then '🔌 Accessoire Smartphone'
-            when lower(title) like '%chargeur%' and lower(title) like '%smartphone%' then '🔌 Accessoire Smartphone'
-            when lower(title) like '%protection%' and lower(title) like '%smartphone%' then '🔌 Accessoire Smartphone'
-            when lower(title) like '%objectif%' and lower(title) like '%smartphone%' then '🔌 Accessoire Smartphone'
-            when lower(title) like '%lentille%' and lower(title) like '%smartphone%' then '🔌 Accessoire Smartphone'
-            when lower(title) like '%enceinte%' and lower(title) like '%smartphone%' then '🔊 Audio / Home Cinéma'
-            when lower(title) like '%batterie%' and lower(title) like '%smartphone%' then '🔌 Accessoire Smartphone'
-            when lower(title) like '%pour pièces%' and lower(title) like '%smartphone%' then '🔧 Pièces Détachées'
-            when lower(title) like '%trepied%' and lower(title) like '%smartphone%' then '🔌 Accessoire Smartphone'
-            when lower(title) like '%stabilisateur%' and lower(title) like '%smartphone%' then '🔌 Accessoire Smartphone'
-            when lower(title) like '%feiyutech%' then '🔌 Accessoire Smartphone'
-            when lower(title) like '%dji%' then '🔌 Accessoire Smartphone'
-            When lower(title) like '%gimbal%' then '🔌 Accessoire Smartphone'
-            when lower(title) like '%sac%' and lower(title) like '%smartphone%' then '🔌 Accessoire Smartphone'
-            when lower(title) like '%Accessoire%' and lower(title) like '%smartphone%' then '🔌 Accessoire Smartphone'
-            
-            when lower(title) like '%manette%' and (lower(title) like '%console%' or lower(title) like '%wii%' or lower(title) like '%xbox%' or lower(title) like '%playstation%' or lower(title) like '%switch%') then '🎮 Accessoire Console'
-            when lower(title) like '%volant%' and (lower(title) like '%console%' or lower(title) like '%wii%' or lower(title) like '%xbox%' or lower(title) like '%playstation%' or lower(title) like '%switch%') then '🎮 Accessoire Console'
-            when lower(title) like '%casque%' and (lower(title) like '%console%' or lower(title) like '%wii%' or lower(title) like '%xbox%' or lower(title) like '%playstation%' or lower(title) like '%switch%') then '🎧 Casque Gaming'
-            when lower(title) like '%jeux vidéo%' and (lower(title) like '%console%' or lower(title) like '%wii%' or lower(title) like '%xbox%' or lower(title) like '%playstation%' or lower(title) like '%switch%') then '💿 Jeu Vidéo'
-            when lower(title) like '%accessoire%' and (lower(title) like '%jeu%' or lower(title) like '%ps%%' or lower(title) like '%console%' or lower(title) like '%playstation%' or lower(title) like '%switch%') then '💿 Jeu Vidéo'
-            when lower(title) like '%POCHETTE%' and (lower(title) like '%CONSOLE%' or lower(title) like '%wii%') then '🎮 Accessoire Console'
-            when lower(title) like '%everdrive%' then '🎮 Accessoire Console'
-            when lower(title) like '%sync strike%' then '🎮 Accessoire Console'
-            when lower(title) like '%beyblade%' then '🎮 Accessoire Gaming'
-
-            when lower(title) like '%appareil photo%' and (lower(title) like '%objectif%' or lower(title) like '%lentille%' or lower(title) like '%trépied%' or lower(title) like '%stabilisateur%' or lower(title) like '%sac%' or lower(title) like '%housse%') then '🔌 Accessoire Camera'
-            when lower(title) like '%appareil photo%' and (lower(title) like '%sony%' or lower(title) like '%canon%' or lower(title) like '%nikon%' or lower(title) like '%fujifilm%' or lower(title) like '%olympus%' or lower(title) like '%panasonic%') then '🔌 Accessoire Camera'
-            
-            -- ========== LAYER 4: PRICE-BASED HEURISTICS ==========
-            when search_keyword in ('ps5', 'xbox') and price < 120.0 then '🎮 Accessoire non classé ou Jeu'
-            when search_keyword = 'switch' and price < 90.0 then '🎮 Accessoire ou Jeu Switch'
-            when search_keyword in ('iphone', 'samsung') and price < 70.0 then '🔌 Accessoire / Pièce détachée'
-            when search_keyword in ('tele', 'television', 'tv') and price < 35.0 then '🔌 Accessoire / Pièce détachée TV'
-            
-            -- ========== LAYER 5: SEARCH CONTEXT FALLBACK ==========
-            when search_keyword in ('tele', 'television', 'tv') then '📺 Téléviseur'
-            when search_keyword in ('ps5', 'ps4', 'xbox', 'switch', 'console') then '🕹️ Console'
-            when search_keyword in ('iphone', 'samsung', 'pixel', 'smartphone') then '📱 Smartphone'
-            when search_keyword in ('macbook', 'pc', 'laptop') then '💻 Ordinateur'
-            
-            -- ========== LAYER 6: GENERIC FALLBACK ==========
-            else '📦 Autre'
-        end as sub_category
-    from matched_rules
-    where rule_rank = 1 or rule_rank is null
+        -- C. Intention de l'annonce
+        CASE 
+            WHEN UPPER(title) ~* '(CHERCHE|RECHERCHE|ECHANGE|CONTRE|ACHETE|ACHÈTE|REPARE|REPARATION|RÉPARATION|JE CHERCHE|JE RECHERCHE|JE VEUX|JE VENDS|JE VEND)' 
+                THEN 'RECHERCHE/SERVICE'
+            ELSE 'VENTE'
+        END AS listing_intent
+    FROM unified_staging
 ),
 
--- ÉTAPE 2 : Extraction de category et type
-final_classification as (
-    select
+-- ====================================================================
+-- 2. EXTRACTION DES FEATURES ET CLASSIFICATION PAR MODÈLE
+-- ====================================================================
+extracted_features AS (
+    SELECT
         timestamp,
+        ingested_at,
         source,
-        search_keyword,
+        refined_category AS category,
+        refined_brand AS brand,
+        listing_intent,
         title,
-        product_brand,
         price,
-        etat,
+        product_condition,
         url,
-        sub_category,
-        split_part(sub_category, ' ', 1) || ' ' || split_part(sub_category, ' ', 2) as category,
-        coalesce(
-            nullif(trim(regexp_replace(sub_category, '^[^ ]+ [^ ]+ ', '')), ''),
-            'Standard'
-        ) as type
-    from sub_category_generation
+        
+        CASE 
+            -------------------------------------------------------------------
+            -- UNIVERS ACCESSOIRES ET PÉRIPHÉRIQUES
+            -------------------------------------------------------------------
+            WHEN refined_category = 'ACCESSOIRE' AND UPPER(title) ~* '(PS5|PLAYSTATION\s*5|PLAY\s+STATION\s*5)' THEN 'Accessoire PS5'
+            WHEN refined_category = 'ACCESSOIRE' AND UPPER(title) ~* '(PS4|PLAYSTATION\s*4|PLAY\s+STATION\s*4)' THEN 'Accessoire PS4'
+            WHEN refined_category = 'ACCESSOIRE' AND (UPPER(title) ~* '(XBOX|FORZA|THRUSTMASTER)' OR refined_brand IN ('MICROSOFT', 'THRUSTMASTER')) THEN 'Accessoire Xbox / PC'
+            WHEN refined_category = 'ACCESSOIRE' AND UPPER(title) ~* '(IPHONE|APPLE)' THEN 'Accessoire iPhone'
+            WHEN refined_category = 'ACCESSOIRE' AND UPPER(title) ~* '(SAMSUNG|GALAXY)' THEN 'Accessoire Samsung'
+            WHEN refined_category = 'ACCESSOIRE' AND UPPER(title) ~* '(WII|NINTENDO|SWITCH)' THEN 'Accessoire Nintendo'
+            WHEN refined_category = 'ACCESSOIRE' AND (UPPER(title) ~* '(SOURIS|CLAVIER|LOGITECH)' OR refined_brand = 'LOGITECH') THEN 'Accessoire PC / Laptop'
+            WHEN refined_category = 'ACCESSOIRE' AND UPPER(title) ~* '(CASQUE|OREILLETTE|ÉCOUTEUR|ECOUTEUR)' THEN 'Casque / Écouteur'
+            WHEN refined_category = 'ACCESSOIRE' AND UPPER(title) ~* '(CHARGEUR|CÂBLE|CABLE)' THEN 'Chargeur / Câble'
+            WHEN refined_category = 'ACCESSOIRE' AND UPPER(title) ~* '(SOURIS|CLAVIER)' THEN 'Périphérique PC'
+            WHEN refined_category = 'PIECE DETACHEE' THEN 'Pièce / Composant Brute'
+-------------------------------------------------------------------
+            -- UNIVERS APPLE IPHONE (Vrais Téléphones)
+            -------------------------------------------------------------------
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 17 PRO MAX%' THEN 'iPhone 17 Pro Max'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 17 PRO%'     THEN 'iPhone 17 Pro'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 17 PLUS%'    THEN 'iPhone 17 Plus'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 17E%'         THEN 'iPhone 17e'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 17%'         THEN 'iPhone 17'
+            
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 16 PRO MAX%' THEN 'iPhone 16 Pro Max'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 16 PRO%'     THEN 'iPhone 16 Pro'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 16 PLUS%'    THEN 'iPhone 16 Plus'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 16%'         THEN 'iPhone 16'
+            
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 15 PRO MAX%' THEN 'iPhone 15 Pro Max'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 15 PRO%'     THEN 'iPhone 15 Pro'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 15 PLUS%'    THEN 'iPhone 15 Plus'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 15%'         THEN 'iPhone 15'
+            
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 14 PRO MAX%' THEN 'iPhone 14 Pro Max'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 14 PRO%'     THEN 'iPhone 14 Pro'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 14 PLUS%'    THEN 'iPhone 14 Plus'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 14%'         THEN 'iPhone 14'
+            
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 13 PRO MAX%' THEN 'iPhone 13 Pro Max'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 13 PRO%'     THEN 'iPhone 13 Pro'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 13 MINI%'    THEN 'iPhone 13 Mini'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 13%'         THEN 'iPhone 13'
+            
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 12 PRO MAX%' THEN 'iPhone 12 Pro Max'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 12 PRO%'     THEN 'iPhone 12 Pro'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 12 MINI%'    THEN 'iPhone 12 Mini'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 12%'         THEN 'iPhone 12'
+            
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 11 PRO MAX%' THEN 'iPhone 11 Pro Max'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 11 PRO%'     THEN 'iPhone 11 Pro'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE 11%'         THEN 'iPhone 11'
+            
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE SE%'         THEN 'iPhone SE'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE X%'          THEN 'iPhone X'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE XR%'         THEN 'iPhone XR'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE XS%'         THEN 'iPhone XS'
+
+            -------------------------------------------------------------------
+            -- CATALOGUE RESTAURÉ SAMSUNG (Vrais Téléphones)
+            -------------------------------------------------------------------
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S24 ULTRA%' THEN 'Galaxy S24 Ultra'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S24+%'       THEN 'Galaxy S24 Plus'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S24%'        THEN 'Galaxy S24'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S23 ULTRA%' THEN 'Galaxy S23 Ultra'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S23+%'       THEN 'Galaxy S23 Plus'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S23 FE%'     THEN 'Galaxy S23 FE'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S23%'        THEN 'Galaxy S23'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S22 ULTRA%' THEN 'Galaxy S22 Ultra'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S22+%'       THEN 'Galaxy S22 Plus'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S22%'        THEN 'Galaxy S22'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S21 ULTRA%' THEN 'Galaxy S21 Ultra'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S21+%'       THEN 'Galaxy S21 Plus'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S21%'        THEN 'Galaxy S21'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY NOTE 20 ULTRA%' THEN 'Galaxy Note 20 Ultra'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY NOTE 20%'       THEN 'Galaxy Note 20'
+            
+            
+            -- Gamme Z (Pliables)
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY Z FOLD 6%'   THEN 'Galaxy Z Fold 6'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY Z FLIP 6%'   THEN 'Galaxy Z Flip 6'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY Z FOLD 5%'   THEN 'Galaxy Z Fold 5'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY Z FLIP 5%'   THEN 'Galaxy Z Flip 5'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY Z FOLD%'     THEN 'Galaxy Z Fold'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY Z FLIP%'     THEN 'Galaxy Z Flip'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY FOLD%'       THEN 'Galaxy Z Fold'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY FLIP%'       THEN 'Galaxy Z Flip'
+            
+            -- Gamme A & FE & Historique
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY A55%'        THEN 'Galaxy A55'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY A35%'        THEN 'Galaxy A35'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY A15%'        THEN 'Galaxy A15'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY A54%'        THEN 'Galaxy A54'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY A34%'        THEN 'Galaxy A34'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY A14%'        THEN 'Galaxy A14'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY A53%'        THEN 'Galaxy A53'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) ~* '(GALAXY A23|SAMSUNG A 23)' THEN 'Galaxy A23'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S4%'         THEN 'Galaxy S4'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S5%'         THEN 'Galaxy S5'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S6%'         THEN 'Galaxy S6'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S7%'         THEN 'Galaxy S7'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S8%'         THEN 'Galaxy S8'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S9%'         THEN 'Galaxy S9'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S10%'        THEN 'Galaxy S10'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S20%'        THEN 'Galaxy S20'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S21%'        THEN 'Galaxy S21'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S22%'        THEN 'Galaxy S22'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S23%'        THEN 'Galaxy S23'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY NOTE 10%'    THEN 'Galaxy Note 10'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY NOTE 9%'     THEN 'Galaxy Note 9'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY NOTE 8%'     THEN 'Galaxy Note 8'
+            WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY NOTE 7%'     THEN 'Galaxy Note 7'
+            
+            
+
+            -------------------------------------------------------------------
+            -- UNIVERS CONSOLES RESTAURÉ (Vraies Machines)
+            -------------------------------------------------------------------
+            WHEN refined_category = 'CONSOLE' AND (UPPER(title) LIKE '%PLAYSTATION 5 PRO%' OR UPPER(title) LIKE '%PS5 PRO%') THEN 'PlayStation 5 Pro'
+            WHEN refined_category = 'CONSOLE' AND (UPPER(title) LIKE '%PLAYSTATION 5 SLIM%' OR UPPER(title) LIKE '%PS5 SLIM%') THEN 'PlayStation 5 Slim'
+            WHEN refined_category = 'CONSOLE' AND (UPPER(title) LIKE '%PLAYSTATION 5%' OR UPPER(title) LIKE '%PS5%') THEN 'PlayStation 5'
+            WHEN refined_category = 'CONSOLE' AND (UPPER(title) LIKE '%PLAYSTATION 4 PRO%' OR UPPER(title) LIKE '%PS4 PRO%') THEN 'PlayStation 4 Pro'
+            WHEN refined_category = 'CONSOLE' AND (UPPER(title) LIKE '%PLAYSTATION 4 SLIM%' OR UPPER(title) LIKE '%PS4 SLIM%') THEN 'PlayStation 4 Slim'
+            WHEN refined_category = 'CONSOLE' AND (UPPER(title) LIKE '%PLAYSTATION 4%' OR UPPER(title) LIKE '%PS4%') THEN 'PlayStation 4'
+            WHEN refined_category = 'CONSOLE' AND (UPPER(title) LIKE '%PLAYSTATION 3%' OR UPPER(title) LIKE '%PS3%') THEN 'PlayStation 3'
+            WHEN refined_category = 'CONSOLE' AND (UPPER(title) LIKE '%PLAYSTATION 2%' OR UPPER(title) LIKE '%PS2%') THEN 'PlayStation 2'
+            WHEN refined_category = 'CONSOLE' AND (UPPER(title) ~* '(PLAYSTATION\s*1|PS1|PS\s*ONE|PSONE)') THEN 'PlayStation 1'
+            WHEN refined_category = 'CONSOLE' AND UPPER(title) LIKE '%PSP%'                  THEN 'PlayStation Portable (PSP)'
+            WHEN refined_category = 'CONSOLE' AND UPPER(title) LIKE '%XBOX SERIES X%'       THEN 'Xbox Series X'
+            WHEN refined_category = 'CONSOLE' AND UPPER(title) LIKE '%XBOX SERIES S%'       THEN 'Xbox Series S'
+            WHEN refined_category = 'CONSOLE' AND UPPER(title) LIKE '%XBOX ONE X%'          THEN 'Xbox One X'
+            WHEN refined_category = 'CONSOLE' AND UPPER(title) LIKE '%XBOX ONE S%'          THEN 'Xbox One S'
+            WHEN refined_category = 'CONSOLE' AND UPPER(title) LIKE '%XBOX ONE%'             THEN 'Xbox One'
+            WHEN refined_category = 'CONSOLE' AND UPPER(title) LIKE '%NINTENDO SWITCH PRO%' THEN 'Nintendo Switch Pro'
+            WHEN refined_category = 'CONSOLE' AND UPPER(title) LIKE '%NINTENDO SWITCH OLED%' THEN 'Nintendo Switch OLED'
+            WHEN refined_category = 'CONSOLE' AND UPPER(title) LIKE '%NINTENDO SWITCH LITE%' THEN 'Nintendo Switch LITE'
+            WHEN refined_category = 'CONSOLE' AND UPPER(title) LIKE '%NINTENDO SWITCH%'      THEN 'Nintendo Switch'
+            WHEN refined_category = 'CONSOLE' AND UPPER(title) LIKE '%WII%'                  THEN 'Nintendo Wii'
+            WHEN refined_category = 'CONSOLE' AND UPPER(title) LIKE '%PLAYSTATION VITA%'     THEN 'PlayStation Vita'
+            WHEN refined_category = 'CONSOLE' AND UPPER(title) LIKE '%PLAYSTATION PORTAL%'       THEN 'PlayStation PORTAL'
+
+            -------------------------------------------------------------------
+            -- CATALOGUE RESTAURÉ ET CORRIGÉ LAPTOPS / ORDINATEURS
+            -------------------------------------------------------------------
+            -- Apple Laptops
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MACBOOK PRO M4%' THEN 'MacBook Pro M4'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MACBOOK PRO M3%' THEN 'MacBook Pro M3'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MACBOOK PRO M2%' THEN 'MacBook Pro M2'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MACBOOK PRO M1%' THEN 'MacBook Pro M1'
+            
+            -- MacBook Pro Touch Bar 
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MACBOOK PRO TOUCH BAR 13%' THEN 'MacBook Pro Touch Bar 13 Pouces'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MACBOOK PRO TOUCH BAR 14%' THEN 'MacBook Pro Touch Bar 14 Pouces'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MACBOOK PRO TOUCH BAR 15%' THEN 'MacBook Pro Touch Bar 15 Pouces'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MACBOOK PRO TOUCH BAR 16%' THEN 'MacBook Pro Touch Bar 16 Pouces'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MACBOOK PRO TOUCH BAR 17%' THEN 'MacBook Pro Touch Bar 17 Pouces'
+
+            -- MacBook Pro & Air Standards
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MACBOOK PRO 13%'       THEN 'MacBook Pro 13 Pouces'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MACBOOK PRO 14%'       THEN 'MacBook Pro 14 Pouces'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MACBOOK PRO 16%'       THEN 'MacBook Pro 16 Pouces'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MACBOOK AIR M3%'       THEN 'MacBook Air M3'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MACBOOK AIR M2%'       THEN 'MacBook Air M2'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MACBOOK AIR M1%'       THEN 'MacBook Air M1'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MACBOOK AIR 13%'       THEN 'MacBook Air 13 Pouces'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MACBOOK AIR 15%'       THEN 'MacBook Air 15 Pouces'
+            
+            -- PC Laptops Premium & Business
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%DELL XPS%'       THEN 'Dell XPS'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%THINKPAD%'       THEN 'Lenovo ThinkPad'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ZENBOOK%'        THEN 'Asus ZenBook'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%VIVOBOOK%'       THEN 'Asus VivoBook'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%INSPIRON%'       THEN 'Dell Inspiron'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ENVY%'          THEN 'HP Envy'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%SPECTRE%'       THEN 'HP Spectre'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%LATITUDE%'       THEN 'Dell Latitude'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%LATITUDE%'       THEN 'Dell Latitude'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%SURFACE%'       THEN 'Microsoft Surface'
+
+            
+            -- Laptops Gaming & Grand Public
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%SURFACE LAPTOP%' THEN 'Microsoft Surface'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%SURFACE PRO%'    THEN 'Microsoft Surface Pro'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ROG ZEPHYRUS%'   THEN 'Asus ROG Zephyrus'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ROG STRIX%'      THEN 'Asus ROG Strix'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ALIENWARE%'      THEN 'Dell Alienware'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%HP SPECTRE%'     THEN 'HP Spectre'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%HP ENVY%'        THEN 'HP Envy'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%HP PAVILION%'    THEN 'HP Pavilion'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%LENOVO YOGA%'    THEN 'Lenovo Yoga'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%LEGION%'         THEN 'Lenovo Legion'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ACER NITRO%'     THEN 'Acer Nitro'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ACER PREDATOR%'  THEN 'Acer Predator'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ACER SWIFT%'     THEN 'Acer Swift'            
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ASUS TUF%'       THEN 'Asus TUF'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ASUS VIVOBOOK%'   THEN 'Asus VivoBook'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ASUS ZENBOOK%'     THEN 'Asus ZenBook'
+            -- ajoute des models supplémentaires ici selon les besoins (acer swift, hp pavilion, amd, ryzen, etc.)
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ACER SWIFT%'     THEN 'Acer Swift'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%HP PAVILION%'    THEN 'HP Pavilion'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%LENOVO LEGION%'    THEN 'Lenovo Legion'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ACER PREDATOR%'    THEN 'Acer Predator'    
+            
+
+            ---
+            -- 1. HANDHELDS (PC Consoles portables)
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ROG ALLY X%' THEN 'Asus ROG Ally X'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ROG ALLY%'  THEN 'Asus ROG Ally'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MSI CLAW%'  THEN 'MSI Claw'
+
+            -- 2. HP
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ELITEBOOK%' THEN 'HP EliteBook'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%PROBOOK%'  THEN 'HP ProBook'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ZBOOK%'    THEN 'HP ZBook'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%SPECTRE%'  THEN 'HP Spectre'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ENVY%'     THEN 'HP Envy'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%OMEN%'     THEN 'HP Omen'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%PAVILION%' THEN 'HP Pavilion'
+
+            -- 3. ASUS
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ZENBOOK%'    THEN 'Asus ZenBook'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%VIVOBOOK%'   THEN 'Asus VivoBook'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ROG ZEPHYRUS%' THEN 'Asus ROG Zephyrus'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ROG STRIX%'  THEN 'Asus ROG Strix'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%TUF%'        THEN 'Asus TUF'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%EXPERTBOOK%' THEN 'Asus ExpertBook'
+
+            -- 4. LENOVO
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%THINKPAD%' THEN 'Lenovo ThinkPad'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%IDEAPAD%'  THEN 'Lenovo IdeaPad'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%YOGA%'     THEN 'Lenovo Yoga'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%LEGION%'   THEN 'Lenovo Legion'
+
+            -- 5. DELL
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ALIENWARE%' THEN 'Dell Alienware'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%PRECISION%' THEN 'Dell Precision'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%LATITUDE%'  THEN 'Dell Latitude'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%INSPIRON%'  THEN 'Dell Inspiron'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%XPS%'       THEN 'Dell XPS'
+
+            -- 6. MSI
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%KATANA%'     THEN 'MSI Katana'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%CYBORG%'     THEN 'MSI Cyborg'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%CROSSHAIR%'  THEN 'MSI Crosshair'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%PULSE%'      THEN 'MSI Pulse'
+            WHEN refined_category = 'ORDINATEUR' AND (UPPER(title) LIKE '%THIN GF63%' OR UPPER(title) LIKE '%GF63%') THEN 'MSI Thin'
+
+            -- 7. AUTRES & CHROMEBOOKS
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%SURFACE LAPTOP%' THEN 'Microsoft Surface'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%SURFACE PRO%'    THEN 'Microsoft Surface Pro'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%PREDATOR%'       THEN 'Acer Predator'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%NITRO%'          THEN 'Acer Nitro'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%SWIFT%'          THEN 'Acer Swift'
+            WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%CHROMEBOOK%'     THEN 'Chromebook'
+            ELSE 'Modèle non répertorié'
+        END AS product_model,
+
+        -- D. EXTRACTION DU STOCKAGE (Ajout du support pour 'GIGA' et '40GO')
+        CASE 
+            WHEN title ~* '1\s*(to|tb)'              THEN '1 To'
+            WHEN title ~* '2\s*(to|tb)'              THEN '2 To'
+            WHEN title ~* '512\s*(go|gb|giga)'        THEN '512 Go'
+            WHEN title ~* '256\s*(go|gb|giga)'        THEN '256 Go'
+            WHEN title ~* '128\s*(go|gb|giga)'        THEN '128 Go'
+            WHEN title ~* '64\s*(go|gb|giga)'         THEN '64 Go'
+            WHEN title ~* '40\s*(go|gb|giga)'         THEN '40 Go'
+            WHEN title ~* '32\s*(go|gb|giga)'         THEN '32 Go'
+            WHEN title ~* '16\s*(go|gb|giga)'         THEN '16 Go'
+            WHEN title ~* '825\s*(go|gb|giga)'        THEN '825 Go'
+            WHEN title ~* '500\s*(go|gb|giga)'        THEN '500 Go'
+            ELSE 'Non spécifié'
+        END AS storage_capacity,
+
+        -- E. EXTRACTION TAILLE D'ÉCRAN
+        CASE 
+            WHEN title ~* '13(\.,[0-9])?''?' OR title ~* '13-inch' OR title ~* '13\.3' THEN '13 pouces'
+            WHEN title ~* '14(\.,[0-9])?''?' OR title ~* '14-inch'                    THEN '14 pouces'
+            WHEN title ~* '15(\.,[0-9])?''?' OR title ~* '15-inch' OR title ~* '15\.6' THEN '15 pouces'
+            WHEN title ~* '16(\.,[0-9])?''?' OR title ~* '16-inch'                    THEN '16 pouces'
+            WHEN title ~* '17(\.,[0-9])?''?' OR title ~* '17-inch' OR title ~* '17\.3' THEN '17 pouces'
+            ELSE NULL
+        END AS screen_size
+
+
+    FROM refined_base
 )
 
-select * from final_classification
+-- ====================================================================
+-- 3. SÉLECTION FINALE ET CLÉ UNIQUE MD5
+-- ====================================================================
+SELECT
+    md5(concat(source, title, price::text, timestamp::text)) AS product_id,
+    timestamp,
+    ingested_at,
+    source,
+    category,
+    brand,
+    listing_intent,
+    product_model,
+    storage_capacity,
+    screen_size,
+    title,
+    price,
+    product_condition,
+    url
+FROM extracted_features

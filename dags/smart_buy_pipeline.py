@@ -25,7 +25,7 @@ with DAG(
     schedule_interval='43 5 * * *',  # Tous les jours à 7h du matin
     catchup=False,
     params={
-        "search_query": Param("console, smartphone ", type="string", description="Produit à rechercher")
+        "search_query": Param("iphone,playstation,xbox,samsung,laptop ", type="string", description="Produit à rechercher")
     }
 ) as dag:
 
@@ -94,5 +94,11 @@ with DAG(
         bash_command='python /opt/airflow/scripts/send_deals.py'
     )
 
+    #--- SAVE TO MONGO ---
+    task_send_mongo = BashOperator(
+        task_id='send_to_mongo',
+        bash_command='python /opt/airflow/scripts/send_mongo.py'
+    )
+
     # --- DÉFINITION DU FLUX ---
-    [scrape_ebay, scrape_amazon, scrape_leboncoin, scrape_cashexpress] >> task_spark_load >> dbt_shopping_pipeline >> task_send_deals
+    [scrape_ebay, scrape_amazon, scrape_leboncoin, scrape_cashexpress] >> task_spark_load >> dbt_shopping_pipeline >> task_send_deals >> task_send_mongo

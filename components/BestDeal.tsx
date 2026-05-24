@@ -1,14 +1,14 @@
 'use client';
 
+import React, { useMemo } from 'react';
 import { IDeal } from '@/models/Deal';
 
 export const BestDeal = ({ deals }: { deals: IDeal[] }) => {
-  if (!deals || deals.length === 0) return null;
-
-  // 1. Calcul mémorisé pour éviter les recalculs inutiles
-  const bestDeal = [...deals].sort(
-    (a, b) => (b.estimated_resell_profit || 0) - (a.estimated_resell_profit || 0)
-  )[0];
+  // 1. Optimisation : on utilise useMemo pour trier uniquement si 'deals' change
+  const bestDeal = useMemo(() => {
+    if (!deals || deals.length === 0) return null;
+    return [...deals].sort((a, b) => (b.estimated_resell_profit || 0) - (a.estimated_resell_profit || 0))[0];
+  }, [deals]);
 
   if (!bestDeal || (bestDeal.estimated_resell_profit || 0) <= 0) return null;
 
@@ -51,10 +51,10 @@ export const BestDeal = ({ deals }: { deals: IDeal[] }) => {
           <h3 className="text-md font-bold text-white leading-tight">{bestDeal.title}</h3>
           
           <div className="grid grid-cols-2 gap-2 text-xs">
-            <InfoRow label="Prix" value={`${bestDeal.price}€`} />
-            <InfoRow label="Médiane" value={`${bestDeal.median_model_price?.toFixed(0)}€`} />
-            <InfoRow label="État" value={bestDeal.product_condition} />
-            <InfoRow label="Source" value={bestDeal.source} />
+            <InfoRow label="Prix" value={`${bestDeal.price?.toFixed(0) || 0}€`} />
+            <InfoRow label="Médiane" value={`${bestDeal.median_model_price?.toFixed(0) || 0}€`} />
+            <InfoRow label="État" value={bestDeal.product_condition || 'N/A'} />
+            <InfoRow label="Source" value={bestDeal.source || 'N/A'} />
           </div>
         </div>
 
@@ -62,7 +62,7 @@ export const BestDeal = ({ deals }: { deals: IDeal[] }) => {
         <div className="flex flex-col gap-3">
           <div className="bg-slate-800/50 rounded-lg p-3 text-center border border-slate-700">
             <p className="text-[10px] text-slate-400 uppercase">Z-Score</p>
-            <p className="text-emerald-400 font-mono font-bold text-lg">{bestDeal.z_score?.toFixed(2)}</p>
+            <p className="text-emerald-400 font-mono font-bold text-lg">{bestDeal.z_score?.toFixed(2) || '0.00'}</p>
           </div>
           <button
             onClick={handleOpen}
@@ -76,7 +76,6 @@ export const BestDeal = ({ deals }: { deals: IDeal[] }) => {
   );
 };
 
-// Petit composant helper pour cleaner le code
 const InfoRow = ({ label, value }: { label: string; value: string }) => (
   <div className="flex justify-between border-b border-slate-800 pb-1">
     <span className="text-slate-500">{label}</span>

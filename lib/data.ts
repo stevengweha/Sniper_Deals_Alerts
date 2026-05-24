@@ -1,12 +1,13 @@
-import { connectDB } from './mongodb';
+'use server';
+
+import { connectDB } from '@/lib/mongodb';
 import { Deal } from '@/models/Deal';
 
-export async function getDashboardData(filters: any = {}) {
+export async function getDashboardData(filters: any = {}, page = 1, limit = 20) {
   await connectDB();
 
-  // 1. Définition de la requête de base (Sans filtre de statut imposé)
+  // 1. Construction dynamique de la requête
   const query: any = {};
-
   if (filters.category && filters.category !== 'Tous' && filters.category !== 'All') query.category = filters.category;
   if (filters.brand && filters.brand !== 'Tous' && filters.brand !== 'All') query.brand = filters.brand;
   if (filters.product_model && filters.product_model !== 'Tous' && filters.product_model !== 'All') query.product_model = filters.product_model;
@@ -19,45 +20,50 @@ export async function getDashboardData(filters: any = {}) {
     if (filters.maxPrice) query.price.$lte = filters.maxPrice;
   }
 
-  if (filters.search) {
-    const regex = new RegExp(filters.search, 'i');
-    query.$or = [{ title: regex }, { product_model: regex }, { brand: regex }];
-  }
-
-  // 2. Récupération des données et comptage réel
-  // On utilise countDocuments pour le total réel, et on récupère tout (sans .limit)
-  const [deals, totalDeals, allDeals] = await Promise.all([
-    Deal.find(query).sort({ timestamp: -1 }).lean(), 
-    Deal.countDocuments(query),
-    Deal.find({}).lean() // Récupère tout pour la sidebar
+  // 2. Exécution parallèle optimisée avec récupération des filtres globaux
+  const [deals, statsResult, categories, brands, models, totalDeals] = await Promise.all([
+    // Pagination : on ne récupère que le nombre limité d'éléments
+    Deal.find(query)
+      .sort({ timestamp: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean(),
+    
+    // Agrégation : le calcul est fait par MongoDB
+    Deal.aggregate([
+      { $match: query },
+      { $group: {
+          _id: null,
+          avgPrice: { $avg: "$price" },
+          bestPrice: { $min: "$price" },
+          avgProfit: { $avg: "$estimated_resell_profit" },
+          bestProfit: { $max: "$estimated_resell_profit" },
+          totalPotentialProfit: { $sum: "$estimated_resell_profit" }
+      }}
+    ]),
+    
+    // Récupération globale pour remplir les menus du filtre (indépendant de la pagination)
+    Deal.distinct("category"),
+    Deal.distinct("brand"),
+    Deal.distinct("product_model"),
+    
+    // Nombre total de documents pour la pagination
+    Deal.countDocuments(query)
   ]);
-
-  // 3. Calcul des stats basées sur les résultats retournés
-  const avgPrice = totalDeals > 0 ? deals.reduce((acc, d) => acc + (d.price || 0), 0) / totalDeals : 0;
-  const bestPrice = totalDeals > 0 ? Math.min(...deals.map(d => d.price || Infinity)) : 0;
-  const avgProfit = totalDeals > 0 ? deals.reduce((acc, d) => acc + (d.estimated_resell_profit || 0), 0) / totalDeals : 0;
-  const bestProfit = totalDeals > 0 ? Math.max(...deals.map(d => d.estimated_resell_profit || 0)) : 0;
-  const totalPotentialProfit = deals.reduce((acc, d) => acc + (d.estimated_resell_profit || 0), 0);
-  
-  const sourceCounts = deals.reduce((acc: any, d: any) => {
-    acc[d.source] = (acc[d.source] || 0) + 1;
-    return acc;
-  }, {});
-  const bestSource = Object.keys(sourceCounts).length > 0 
-    ? Object.keys(sourceCounts).reduce((a, b) => sourceCounts[a] > sourceCounts[b] ? a : b) 
-    : 'N/A';
 
   return {
     deals: JSON.parse(JSON.stringify(deals)),
-    allDeals: JSON.parse(JSON.stringify(allDeals)),
-    stats: {
-      totalDeals,
-      avgPrice,
-      bestPrice: bestPrice === Infinity ? 0 : bestPrice,
-      avgProfit,
-      bestProfit,
-      totalPotentialProfit,
-      bestSource
+    // On regroupe les options de filtrage dans un seul objet propre
+    filterOptions: {
+      categories: categories || [],
+      brands: brands || [],
+      models: models || []
+    },
+    stats: statsResult[0] || { avgPrice: 0, bestPrice: 0, avgProfit: 0, bestProfit: 0, totalPotentialProfit: 0 },
+    pagination: {
+      totalDeals: totalDeals || 0,
+      currentPage: page,
+      totalPages: Math.ceil((totalDeals || 0) / limit)
     }
   };
 }

@@ -13,6 +13,7 @@ async function sendTelegramMessage(chatId: number, text: string) {
     body: JSON.stringify({
       chat_id: chatId,
       text,
+      parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [[
           { text: "🚀 Accéder au Scanner de Deals", web_app: { url: WEB_APP_URL } }
@@ -30,21 +31,32 @@ export async function POST(req: Request) {
     const chatId = message.chat.id;
     const text = message.text || '';
 
-    // Sauvegarde en arrière-plan sans bloquer la réponse
-    saveChatToDb({
+    // 1. Connexion DB et vérification si l'utilisateur est nouveau
+    await connectDB();
+    const userExists = await User.exists({ telegramId: chatId });
+
+    // 2. Sauvegarde ou mise à jour des infos utilisateur
+    await saveChatToDb({
       id: chatId,
       username: message.from?.username || message.chat.title || 'Inconnu',
       firstName: message.from?.first_name || message.chat.title || 'Groupe/Canal'
-    }).catch(console.error);
+    });
 
-    // Gestion des commandes
+    // 3. Gestion des commandes
     if (text.startsWith('/start')) {
-      const isDeepLink = text === '/start app';
-      const welcomeMessage = isDeepLink 
-        ? "🎯 Accès direct activé ! Ton scanner d'opportunités est prêt."
-        : "👋 Bienvenue sur Smart Buy Sentinel !\n\nJe surveille les meilleures opportunités pour toi. Utilise le bouton ci-dessous pour lancer le scanner.";
-      
-      await sendTelegramMessage(chatId, welcomeMessage);
+      // On n'envoie le message de bienvenue QUE si l'utilisateur est nouveau
+      if (!userExists) {
+        const isDeepLink = text === '/start app';
+        const welcomeMessage = `👋 Bienvenue sur Smart Buy Sentinel !\n\n` +
+          `Je suis ton assistant personnel pour dénicher les meilleures opportunités du marché.\n\n` +
+          `🚀 **Ce que je fais pour toi :**\n` +
+          `• Surveillance en temps réel des prix.\n` +
+          `• Détection automatique de deals ultra-rentables.\n` +
+          `• Analyse rapide pour t'aider à décider en un clin d'œil.\n\n` +
+          `${isDeepLink ? "🎯 Accès direct activé !" : "Utilise le bouton ci-dessous pour lancer la Mini-App et commencer à économiser !"}`;
+        
+        await sendTelegramMessage(chatId, welcomeMessage);
+      }
     }
 
     return NextResponse.json({ status: 'ok' });
@@ -55,17 +67,20 @@ export async function POST(req: Request) {
 }
 
 async function saveChatToDb(chatInfo: any) {
-  await connectDB();
-  await User.findOneAndUpdate(
-    { telegramId: chatInfo.id },
-    { 
-      $set: {
-        username: chatInfo.username, 
-        firstName: chatInfo.firstName,
-        lastSeen: new Date()
-      }
-    },
-    { upsert: true }
-  );
-  console.log(`✅ Chat ${chatInfo.id} synchronisé.`);
+  try {
+    await User.findOneAndUpdate(
+      { telegramId: chatInfo.id },
+      { 
+        $set: {
+          username: chatInfo.username, 
+          firstName: chatInfo.firstName,
+          lastSeen: new Date()
+        }
+      },
+      { upsert: true }
+    );
+    console.log(`✅ Chat ${chatInfo.id} synchronisé.`);
+  } catch (error) {
+    console.error('❌ Erreur Mongoose :', error);
+  }
 }

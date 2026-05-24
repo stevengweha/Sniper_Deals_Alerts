@@ -1,16 +1,13 @@
 import { getDashboardData } from '@/lib/data';
-import FilterSidebar from '@/components/CategoryFilter';
+import HorizontalFilterBar from '@/components/CategoryFilter';
 import { DealList } from '@/components/DealList';
 import { BestDeal } from '@/components/BestDeal';
-import { TopDeals } from '@/components/TopDeals';
 
 export default async function Dashboard({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
-  // 1. Normalisation des filtres
   const filters = {
     category: typeof searchParams.category === 'string' ? searchParams.category : undefined,
     brand: typeof searchParams.brand === 'string' ? searchParams.brand : undefined,
     product_model: typeof searchParams.product_model === 'string' ? searchParams.product_model : undefined,
-    storage_capacity: typeof searchParams.storage_capacity === 'string' ? searchParams.storage_capacity : undefined,
     source: typeof searchParams.source === 'string' ? searchParams.source : undefined,
     product_condition: typeof searchParams.product_condition === 'string' ? searchParams.product_condition : undefined,
     minPrice: typeof searchParams.minPrice === 'string' ? parseInt(searchParams.minPrice) : undefined,
@@ -18,87 +15,58 @@ export default async function Dashboard({ searchParams }: { searchParams: Record
     search: typeof searchParams.search === 'string' ? searchParams.search : undefined,
   };
 
-  // 2. Récupération des données (Parallélisation)
-  const [allDeals, filteredDeals] = await Promise.all([
-    getDashboardData(),
-    getDashboardData(filters)
-  ]);
-
-  // 3. Calculs des KPIs
-  const totalDeals = filteredDeals.length;
-  const avgPrice = totalDeals > 0 ? filteredDeals.reduce((sum: number, d: any) => sum + (d.price || 0), 0) / totalDeals : 0;
-  const avgProfit = totalDeals > 0 ? filteredDeals.reduce((sum: number, d: any) => sum + (d.estimated_resell_profit || 0), 0) / totalDeals : 0;
-  const bestProfit = totalDeals > 0 ? Math.max(...filteredDeals.map((d: any) => d.estimated_resell_profit || 0)) : 0;
-  const bestPrice = totalDeals > 0 ? Math.min(...filteredDeals.map((d: any) => d.price || Infinity)) : 0;
-  const totalPotentialProfit = filteredDeals.reduce((sum: number, d: any) => sum + Math.max(0, d.estimated_resell_profit || 0), 0);
-
-  const dealsBySource = filteredDeals.reduce((acc: Record<string, number>, d: any) => {
-    acc[d.source || 'Inconnu'] = (acc[d.source || 'Inconnu'] || 0) + 1;
-    return acc;
-  }, {});
-  const bestSource = Object.entries(dealsBySource).sort(([, a], [, b]) => (b as number) - (a as number))[0]?.[0] || 'N/A';
+  const rawData = await getDashboardData(filters);
+  const deals = rawData?.deals || [];
+  const allDeals = rawData?.allDeals || [];
+  const stats = rawData?.stats || { 
+    totalDeals: 0, avgPrice: 0, bestPrice: 0, avgProfit: 0, 
+    bestProfit: 0, totalPotentialProfit: 0, bestSource: 'N/A' 
+  };
 
   return (
-    <main className="min-h-screen bg-slate-950 p-4 md:p-6 flex flex-col md:flex-row gap-6">
-      {/* SIDEBAR */}
-      <aside className="w-full md:w-72 shrink-0">
-        <FilterSidebar data={allDeals} />
-      </aside>
-
-      {/* CONTENU PRINCIPAL */}
-      <section className="flex-1 space-y-8">
+    <main className="min-h-screen bg-[#020617] p-4 md:p-8">
+      <div className="max-w-7xl mx-auto space-y-8">
         
         {/* HEADER */}
-        <div>
-          <h1 className="text-3xl font-bold text-white mb-2">📡 Smart Buy Sentinel</h1>
-          <p className="text-slate-400 text-sm">Intelligence de marché temps-réel — <strong>{totalDeals}</strong> offres filtrées</p>
-        </div>
+        <header>
+          <h1 className="text-4xl font-black text-white tracking-tight">Smart Buy <span className="text-emerald-500">Sentinel</span></h1>
+          <p className="text-slate-400 mt-1">Intelligence de marché • {stats.totalDeals} opportunités actives</p>
+        </header>
 
-        {/* KPIS */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard label="Nombre d'offres" value={totalDeals.toString()} />
-          <KpiCard label="Prix moyen" value={`${avgPrice.toFixed(0)}€`} />
-          <KpiCard label="Meilleur prix" value={`${bestPrice === Infinity ? 0 : bestPrice}€`} color="emerald" />
-          <KpiCard label="Profit moyen" value={`+${avgProfit.toFixed(0)}€`} color="green" />
-        </div>
+        {/* FILTRES PLEINE LARGEUR */}
+        <section className="w-full">
+          <HorizontalFilterBar data={allDeals} />
+        </section>
 
-        {/* HIGHLIGHTS */}
-        {totalDeals > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <BestDeal deals={filteredDeals} />
-            <TopDeals deals={filteredDeals} />
-          </div>
-        )}
+        {/* SECTION STATS */}
+        <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <KpiCard label="Offres Actives" value={stats.totalDeals.toString()} />
+          <KpiCard label="Prix Moyen" value={`${stats.avgPrice.toFixed(0)}€`} />
+          <KpiCard label="Meilleur Prix" value={`${stats.bestPrice}€`} accent="emerald" />
+          <KpiCard label="Profit Moyen" value={`+${stats.avgProfit.toFixed(0)}€`} accent="green" />
+        </section>
 
-        {/* STATS SECONDAIRES */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatBox label="Meilleur profit" value={`+${bestProfit.toFixed(0)}€`} color="green" />
-          <StatBox label="Profit total potentiel" value={`+${totalPotentialProfit.toFixed(0)}€`} color="emerald" />
-          <StatBox label="Meilleure source" value={bestSource} color="yellow" />
-        </div>
+        <BestDeal deals={deals} />
 
-        {/* LISTE */}
-        <DealList deals={filteredDeals} />
-      </section>
+        <section>
+          <h2 className="text-xl font-bold text-white mb-6">📊 Flux d'opportunités</h2>
+          <DealList deals={deals} />
+        </section>
+      </div>
     </main>
   );
 }
 
-// Composants utilitaires pour alléger le code
-function KpiCard({ label, value, color = "white" }: { label: string, value: string, color?: string }) {
+function KpiCard({ label, value, accent = "white" }: { label: string, value: string, accent?: string }) {
+  const colors: Record<string, string> = {
+    white: "text-white",
+    emerald: "text-emerald-400",
+    green: "text-green-400"
+  };
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-      <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider mb-1">{label}</p>
-      <p className={`text-${color}-400 text-2xl font-bold`}>{value}</p>
-    </div>
-  );
-}
-
-function StatBox({ label, value, color }: { label: string, value: string, color: string }) {
-  return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-      <p className="text-slate-500 text-xs font-bold uppercase mb-2">{label}</p>
-      <p className={`text-${color}-400 text-xl font-bold`}>{value}</p>
+    <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-2xl p-5 hover:border-slate-700 transition-all">
+      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">{label}</p>
+      <p className={`text-2xl font-black ${colors[accent]}`}>{value}</p>
     </div>
   );
 }

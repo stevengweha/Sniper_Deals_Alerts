@@ -1,60 +1,63 @@
 import { connectDB } from './mongodb';
 import { Deal } from '@/models/Deal';
 
-export async function getDashboardData(filters: {
-  category?: string;
-  brand?: string;
-  product_model?: string;
-  storage_capacity?: string;
-  source?: string;
-  product_condition?: string;
-  minPrice?: number;
-  maxPrice?: number;
-  search?: string;
-} = {}) {
+export async function getDashboardData(filters: any = {}) {
   await connectDB();
 
-  const query: any = { operational_status: '🟢 Actif' };
+  // 1. Définition de la requête de base (Sans filtre de statut imposé)
+  const query: any = {};
 
-  if (filters.category && filters.category !== 'Tous' && filters.category !== 'All') {
-    query.category = filters.category;
-  }
-  if (filters.brand && filters.brand !== 'Tous' && filters.brand !== 'All') {
-    query.brand = filters.brand;
-  }
-  if (filters.product_model && filters.product_model !== 'Tous' && filters.product_model !== 'All') {
-    query.product_model = filters.product_model;
-  }
-  if (filters.storage_capacity && filters.storage_capacity !== 'Toutes' && filters.storage_capacity !== 'All') {
-    query.storage_capacity = filters.storage_capacity;
-  }
-  if (filters.source && filters.source !== 'All') {
-    query.source = filters.source;
-  }
-  if (filters.product_condition && filters.product_condition !== 'Tous' && filters.product_condition !== 'All') {
-    query.product_condition = filters.product_condition;
-  }
+  if (filters.category && filters.category !== 'Tous' && filters.category !== 'All') query.category = filters.category;
+  if (filters.brand && filters.brand !== 'Tous' && filters.brand !== 'All') query.brand = filters.brand;
+  if (filters.product_model && filters.product_model !== 'Tous' && filters.product_model !== 'All') query.product_model = filters.product_model;
+  if (filters.source && filters.source !== 'All') query.source = filters.source;
+  if (filters.product_condition && filters.product_condition !== 'Tous' && filters.product_condition !== 'All') query.product_condition = filters.product_condition;
 
-  if (typeof filters.minPrice === 'number' || typeof filters.maxPrice === 'number') {
+  if (filters.minPrice || filters.maxPrice) {
     query.price = {};
-    if (typeof filters.minPrice === 'number') query.price.$gte = filters.minPrice;
-    if (typeof filters.maxPrice === 'number') query.price.$lte = filters.maxPrice;
+    if (filters.minPrice) query.price.$gte = filters.minPrice;
+    if (filters.maxPrice) query.price.$lte = filters.maxPrice;
   }
 
-  if (filters.search && String(filters.search).trim().length > 0) {
-    const safeSearch = String(filters.search).replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
-    const regex = new RegExp(safeSearch, 'i');
-    query.$or = [
-      { title: regex },
-      { product_model: regex },
-      { brand: regex },
-    ];
+  if (filters.search) {
+    const regex = new RegExp(filters.search, 'i');
+    query.$or = [{ title: regex }, { product_model: regex }, { brand: regex }];
   }
 
-  const deals = await Deal.find(query)
-    .sort({ estimated_resell_profit: -1, z_score: -1 })
-    .limit(100)
-    .lean();
+  // 2. Récupération des données et comptage réel
+  // On utilise countDocuments pour le total réel, et on récupère tout (sans .limit)
+  const [deals, totalDeals, allDeals] = await Promise.all([
+    Deal.find(query).sort({ timestamp: -1 }).lean(), 
+    Deal.countDocuments(query),
+    Deal.find({}).lean() // Récupère tout pour la sidebar
+  ]);
 
-  return JSON.parse(JSON.stringify(deals));
+  // 3. Calcul des stats basées sur les résultats retournés
+  const avgPrice = totalDeals > 0 ? deals.reduce((acc, d) => acc + (d.price || 0), 0) / totalDeals : 0;
+  const bestPrice = totalDeals > 0 ? Math.min(...deals.map(d => d.price || Infinity)) : 0;
+  const avgProfit = totalDeals > 0 ? deals.reduce((acc, d) => acc + (d.estimated_resell_profit || 0), 0) / totalDeals : 0;
+  const bestProfit = totalDeals > 0 ? Math.max(...deals.map(d => d.estimated_resell_profit || 0)) : 0;
+  const totalPotentialProfit = deals.reduce((acc, d) => acc + (d.estimated_resell_profit || 0), 0);
+  
+  const sourceCounts = deals.reduce((acc: any, d: any) => {
+    acc[d.source] = (acc[d.source] || 0) + 1;
+    return acc;
+  }, {});
+  const bestSource = Object.keys(sourceCounts).length > 0 
+    ? Object.keys(sourceCounts).reduce((a, b) => sourceCounts[a] > sourceCounts[b] ? a : b) 
+    : 'N/A';
+
+  return {
+    deals: JSON.parse(JSON.stringify(deals)),
+    allDeals: JSON.parse(JSON.stringify(allDeals)),
+    stats: {
+      totalDeals,
+      avgPrice,
+      bestPrice: bestPrice === Infinity ? 0 : bestPrice,
+      avgProfit,
+      bestProfit,
+      totalPotentialProfit,
+      bestSource
+    }
+  };
 }

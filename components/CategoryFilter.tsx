@@ -1,177 +1,102 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback } from 'react';
+import { RefreshCw, Search } from 'lucide-react';
 
-export default function FilterSidebar({ data }: { data: any[] }) {
+export default function HorizontalFilterBar({ data }: { data: any[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const updateFilter = useCallback(
-    (key: string, value: string | null) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (value === null || value === 'Tous' || value === 'Toutes' || value === 'All') {
-        params.delete(key);
-      } else {
-        params.set(key, value);
-      }
-      router.push(`/?${params.toString()}`);
-    },
-    [searchParams, router]
-  );
+  // Filtrage intelligent pour réduire les options selon les sélections précédentes
+  const getFilteredData = () => {
+    let filtered = [...data];
+    if (searchParams.get('category')) filtered = filtered.filter(d => d.category === searchParams.get('category'));
+    if (searchParams.get('brand')) filtered = filtered.filter(d => d.brand === searchParams.get('brand'));
+    return filtered;
+  };
 
-  const getUnique = (key: string) => {
-    const values = Array.from(
-      new Set(
-        data
-          .map((d) => d[key])
-          .filter((v) => v != null && String(v).trim() !== '')
-      )
-    ).sort();
+  const currentData = getFilteredData();
+
+  const updateFilter = (key: string, value: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (!value || value === 'Tous') params.delete(key);
+    else params.set(key, value);
+    
+    // Réinitialisation intelligente des dépendances
+    if (key === 'category') { params.delete('brand'); params.delete('product_model'); }
+    if (key === 'brand') params.delete('product_model');
+    
+    router.push(`/?${params.toString()}`);
+  };
+
+  const getOptions = (key: string) => {
+    const values = Array.from(new Set(currentData.map((d) => d[key]).filter((v) => v))).sort();
     return ['Tous', ...values];
   };
 
-  // Calcul dynamique des prix
-  const allPrices = data
-    .map((d) => d.price)
-    .filter((p) => typeof p === 'number')
-    .sort((a, b) => a - b);
-  const minPriceAvailable = allPrices[0] ?? 0;
-  const maxPriceAvailable = allPrices[allPrices.length - 1] ?? 1000;
-
   return (
-    <div className="w-full md:w-72 bg-slate-900 p-4 rounded-xl h-fit border border-slate-800 sticky top-4">
-      <h2 className="text-white font-bold mb-4 flex items-center gap-2">
-        🎯 Options du Radar
-      </h2>
-
-      <div className="space-y-4">
-        {/* Catégorie */}
-        <div>
-          <label className="text-slate-400 text-xs font-bold uppercase block mb-2">
-            📂 Catégorie
-          </label>
-          <select
-            onChange={(e) => updateFilter('category', e.target.value === 'Tous' ? null : e.target.value)}
-            defaultValue={searchParams.get('category') ?? 'Tous'}
-            className="w-full bg-slate-950 text-white p-2 rounded border border-slate-700 text-sm"
-          >
-            {getUnique('category').map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Marque */}
-        <div>
-          <label className="text-slate-400 text-xs font-bold uppercase block mb-2">
-            🏷️ Marque
-          </label>
-          <select
-            onChange={(e) => updateFilter('brand', e.target.value === 'Tous' ? null : e.target.value)}
-            defaultValue={searchParams.get('brand') ?? 'Tous'}
-            className="w-full bg-slate-950 text-white p-2 rounded border border-slate-700 text-sm"
-          >
-            {getUnique('brand').map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Modèle */}
-        <div>
-          <label className="text-slate-400 text-xs font-bold uppercase block mb-2">
-            📱 Modèle
-          </label>
-          <select
-            onChange={(e) => updateFilter('product_model', e.target.value === 'Tous' ? null : e.target.value)}
-            defaultValue={searchParams.get('product_model') ?? 'Tous'}
-            className="w-full bg-slate-950 text-white p-2 rounded border border-slate-700 text-sm"
-          >
-            {getUnique('product_model').map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* État du produit */}
-        <div>
-          <label className="text-slate-400 text-xs font-bold uppercase block mb-2">
-            🛡️ État
-          </label>
-          <select
-            onChange={(e) => updateFilter('product_condition', e.target.value === 'Tous' ? null : e.target.value)}
-            defaultValue={searchParams.get('product_condition') ?? 'Tous'}
-            className="w-full bg-slate-950 text-white p-2 rounded border border-slate-700 text-sm"
-          >
-            {getUnique('product_condition').map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Source */}
-        <div>
-          <label className="text-slate-400 text-xs font-bold uppercase block mb-2">
-            🛒 Source
-          </label>
-          <select
-            onChange={(e) => updateFilter('source', e.target.value === 'Tous' ? null : e.target.value)}
-            defaultValue={searchParams.get('source') ?? 'Tous'}
-            className="w-full bg-slate-950 text-white p-2 rounded border border-slate-700 text-sm"
-          >
-            {getUnique('source').map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Prix */}
-        <div>
-          <label className="text-slate-400 text-xs font-bold uppercase block mb-2">
-            💰 Prix (€)
-          </label>
-          <div className="flex gap-2">
+    <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 w-full space-y-4">
+      {/* LIGNE 1 : Recherche + Catégories */}
+      <div className="flex flex-row items-end gap-3 w-full">
+        <div className="flex-[2]">
+          <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Recherche</label>
+          <div className="relative">
+            <Search className="absolute left-2 top-2.5 text-slate-600" size={16} />
             <input
-              type="number"
-              placeholder="Min"
-              defaultValue={searchParams.get('minPrice') ?? minPriceAvailable}
-              onChange={(e) => updateFilter('minPrice', e.target.value || null)}
-              className="w-1/2 bg-slate-950 text-white p-2 rounded border border-slate-700 text-sm"
-            />
-            <input
-              type="number"
-              placeholder="Max"
-              defaultValue={searchParams.get('maxPrice') ?? maxPriceAvailable}
-              onChange={(e) => updateFilter('maxPrice', e.target.value || null)}
-              className="w-1/2 bg-slate-950 text-white p-2 rounded border border-slate-700 text-sm"
+              type="text"
+              placeholder="Ex: iPhone 15..."
+              className="w-full bg-slate-950 text-white pl-8 p-2 rounded-lg border border-slate-800 text-xs focus:border-emerald-500 outline-none"
+              defaultValue={searchParams.get('search') ?? ''}
+              onKeyDown={(e) => e.key === 'Enter' && updateFilter('search', e.currentTarget.value)}
             />
           </div>
         </div>
 
-        {/* Recherche */}
-        <div>
-          <label className="text-slate-400 text-xs font-bold uppercase block mb-2">
-            🔍 Recherche
-          </label>
-          <input
-            type="text"
-            placeholder="Mot-clé..."
-            defaultValue={searchParams.get('search') ?? ''}
-            onChange={(e) => updateFilter('search', e.target.value || null)}
-            className="w-full bg-slate-950 text-white p-2 rounded border border-slate-700 text-sm"
-          />
+        {['category', 'brand'].map((key) => (
+          <div key={key} className="flex-1">
+            <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">
+                {key === 'brand' ? 'Marque' : 'Catégorie'}
+            </label>
+            <select
+              onChange={(e) => updateFilter(key, e.target.value)}
+              value={searchParams.get(key) ?? 'Tous'}
+              className="w-full bg-slate-950 text-white p-2 rounded-lg border border-slate-800 text-xs focus:border-emerald-500 outline-none"
+            >
+              {getOptions(key).map((val) => <option key={val} value={val}>{val}</option>)}
+            </select>
+          </div>
+        ))}
+      </div>
+
+      {/* LIGNE 2 : Modèle + Prix */}
+      <div className="flex flex-row items-end gap-3 w-full">
+        <div className="flex-[2]">
+          <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Modèle</label>
+          <select
+            onChange={(e) => updateFilter('product_model', e.target.value)}
+            value={searchParams.get('product_model') ?? 'Tous'}
+            className="w-full bg-slate-950 text-white p-2 rounded-lg border border-slate-800 text-xs focus:border-emerald-500 outline-none"
+          >
+            {getOptions('product_model').map((val) => <option key={val} value={val}>{val}</option>)}
+          </select>
         </div>
+        
+        <div className="flex-1">
+          <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Min (€)</label>
+          <input type="number" placeholder="0" className="w-full bg-slate-950 text-white p-2 rounded-lg border border-slate-800 text-xs" 
+                 defaultValue={searchParams.get('minPrice') ?? ''}
+                 onBlur={(e) => updateFilter('minPrice', e.target.value)} />
+        </div>
+        <div className="flex-1">
+          <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Max (€)</label>
+          <input type="number" placeholder="Max" className="w-full bg-slate-950 text-white p-2 rounded-lg border border-slate-800 text-xs" 
+                 defaultValue={searchParams.get('maxPrice') ?? ''}
+                 onBlur={(e) => updateFilter('maxPrice', e.target.value)} />
+        </div>
+        
+        <button onClick={() => router.push('/')} className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg transition-all">
+          <RefreshCw size={16} />
+        </button>
       </div>
     </div>
   );

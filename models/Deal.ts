@@ -19,6 +19,7 @@ export interface IDeal extends Document {
   source?: string;
   median_model_price?: number;
   pct_deviation?: number;
+  statistical_confidence?: string; // Ajout du champ de confiance statistique (ex: "🟢 Haute", "🟡 Modérée", "🔴 Faible")
 }
 
 const dealSchema = new Schema<IDeal>({
@@ -38,6 +39,7 @@ const dealSchema = new Schema<IDeal>({
   source: { type: String },
   median_model_price: { type: Number },
   pct_deviation: { type: Number },
+  statistical_confidence: { type: String },
 }, { strict: false });
 
 export const Deal: Model<IDeal> = mongoose.models.Deal || mongoose.model<IDeal>('Deal', dealSchema);

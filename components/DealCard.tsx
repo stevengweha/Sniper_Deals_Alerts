@@ -2,72 +2,61 @@
 
 import React from 'react';
 import { IDeal } from '@/models/Deal';
+import { TrendingDown, ShieldCheck, AlertCircle, Zap } from 'lucide-react';
 
 export const DealCard: React.FC<{ deal: IDeal }> = ({ deal }) => {
   const handleOpen = () => {
-    if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp) {
-      const tg = (window as any).Telegram.WebApp;
-      tg.HapticFeedback.impactOccurred('light');
-      tg.openLink(deal.url);
-    } else {
-      window.open(deal.url, '_blank');
-    }
+    const tg = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp : null;
+    tg?.HapticFeedback.impactOccurred('medium');
+    tg ? tg.openLink(deal.url) : window.open(deal.url, '_blank');
   };
 
-  const profitColor = deal.estimated_resell_profit && deal.estimated_resell_profit > 300 ? 'text-green-400' : deal.estimated_resell_profit && deal.estimated_resell_profit > 100 ? 'text-yellow-400' : 'text-red-400';
-  const dealBadgeColor = deal.deal_score?.includes('EXCELLENT') ? 'bg-emerald-900' : deal.deal_score?.includes('TRÈS') ? 'bg-blue-900' : 'bg-slate-800';
-
+  // Logique pour le badge de confiance
+  const isHighConf = deal.statistical_confidence?.includes('🟢');
+  
   return (
     <button
       onClick={handleOpen}
-      className="w-full text-left bg-slate-900 border border-slate-800 rounded-lg p-4 hover:border-emerald-500/50 transition-all active:scale-[0.98]"
+      className="w-full group text-left bg-slate-900/50 border border-slate-800 rounded-2xl p-5 hover:border-emerald-500/50 transition-all active:scale-[0.98] shadow-xl"
     >
-      {/* En-tête : badge + profit */}
-      <div className="flex justify-between items-start mb-2 gap-2">
-        <span className={`text-xs font-bold px-2 py-1 rounded ${dealBadgeColor} text-white`}>
-          {deal.category}
+      {/* Header : Score et Source */}
+      <div className="flex justify-between items-center mb-4">
+        <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 uppercase tracking-widest bg-emerald-950/30 px-2 py-1 rounded-full border border-emerald-900/50">
+          <Zap size={10} /> {deal.deal_score?.split(' ')[0]}
         </span>
-        <span className={`font-bold text-sm ${profitColor}`}>
-          +{deal.estimated_resell_profit?.toFixed(0) || 0}€
-        </span>
+        <span className="text-[10px] text-slate-500 font-mono">{deal.source}</span>
       </div>
 
-      {/* Deal Score (pour context) */}
-      {deal.deal_score && (
-        <p className="text-xs text-slate-400 mb-2">{deal.deal_score}</p>
-      )}
-
-      {/* Titre du produit */}
-      <h3 className="font-semibold text-sm text-slate-100 line-clamp-2 mb-3">
+      {/* Titre */}
+      <h3 className="font-bold text-white text-sm leading-snug group-hover:text-emerald-400 transition-colors mb-4 line-clamp-2">
         {deal.title}
       </h3>
 
-      {/* Grille d'infos */}
-      <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-800 pt-2">
-        <div>
-          <span className="text-slate-500">Prix:</span>
-          <span className="text-white font-bold ml-1">{deal.price}€</span>
+      {/* Le "Pourquoi" : Analyse de prix */}
+      <div className="bg-slate-950/50 rounded-xl p-3 mb-4 border border-slate-800/50">
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-[10px] text-slate-400 uppercase">Prix marché (Médiane)</span>
+          <span className="text-white font-bold">{deal.median_model_price?.toFixed(0)}€</span>
         </div>
-        <div>
-          <span className="text-slate-500">Médiane:</span>
-          <span className="text-slate-300 font-bold ml-1">{deal.median_model_price?.toFixed(0) || '—'}€</span>
-        </div>
-        <div>
-          <span className="text-slate-500">Écart:</span>
-          <span className={`font-bold ml-1 ${deal.pct_deviation && deal.pct_deviation < -20 ? 'text-green-400' : 'text-red-400'}`}>
-            {deal.pct_deviation?.toFixed(1) || '—'}%
+        <div className="flex justify-between items-center">
+          <span className="text-[10px] text-emerald-500 font-bold uppercase flex items-center gap-1">
+            <TrendingDown size={12} /> Réduction immédiate
           </span>
-        </div>
-        <div>
-          <span className="text-slate-500">Données:</span>
-          <span className="text-slate-300 font-bold ml-1">{deal.data_age_hours || '—'}h</span>
+          <span className="text-emerald-400 font-black">{deal.pct_deviation?.toFixed(0)}%</span>
         </div>
       </div>
 
-      {/* Modèle + Source */}
-      <div className="flex justify-between gap-2 mt-2 pt-2 border-t border-slate-700 text-xs">
-        <span className="text-slate-400">{deal.product_model}</span>
-        <span className="text-slate-500 font-semibold uppercase">{deal.source}</span>
+      {/* Footer : Gain et Confiance */}
+      <div className="flex items-center justify-between border-t border-slate-800 pt-4">
+        <div className="flex flex-col">
+          <span className="text-[9px] text-slate-500 uppercase font-bold">Profit estimé</span>
+          <span className="text-lg font-black text-white">+{deal.estimated_resell_profit?.toFixed(0)}€</span>
+        </div>
+        
+        <div className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded ${isHighConf ? 'text-emerald-400' : 'text-yellow-500'}`}>
+           <ShieldCheck size={12} />
+           {isHighConf ? 'Confiance Liquide' : 'Volume Modéré'}
+        </div>
       </div>
     </button>
   );

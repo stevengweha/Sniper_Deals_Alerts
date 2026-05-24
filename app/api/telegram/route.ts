@@ -31,20 +31,21 @@ export async function POST(req: Request) {
     const chatId = message.chat.id;
     const text = message.text || '';
 
-    // 1. Connexion DB et vérification si l'utilisateur est nouveau
+    // 1. Connexion DB
     await connectDB();
-    const userExists = await User.exists({ telegramId: chatId });
-
-    // 2. Sauvegarde ou mise à jour des infos utilisateur
+    
+    // 2. Sauvegarde ou mise à jour (avec gestion migration)
+    // On passe 'message' entier à la fonction pour détecter migrate_from_chat_id
     await saveChatToDb({
       id: chatId,
       username: message.from?.username || message.chat.title || 'Inconnu',
       firstName: message.from?.first_name || message.chat.title || 'Groupe/Canal'
-    });
+    }, message);
 
     // 3. Gestion des commandes
+    const userExists = await User.exists({ telegramId: chatId });
+    
     if (text.startsWith('/start')) {
-      // On n'envoie le message de bienvenue QUE si l'utilisateur est nouveau
       if (!userExists) {
         const isDeepLink = text === '/start app';
         const welcomeMessage = `👋 Bienvenue sur Smart Buy Sentinel !\n\n` +
@@ -66,8 +67,17 @@ export async function POST(req: Request) {
   }
 }
 
-async function saveChatToDb(chatInfo: any) {
+async function saveChatToDb(chatInfo: any, rawMessage: any) {
   try {
+    // 1. Vérifier si Telegram a migré le groupe vers un Supergroupe
+    if (rawMessage.migrate_from_chat_id) {
+      console.log(`🔄 Migration détectée : ${rawMessage.migrate_from_chat_id} vers ${chatInfo.id}`);
+      
+      // Suppression de l'ancien ID obsolète
+      await User.deleteOne({ telegramId: rawMessage.migrate_from_chat_id });
+    }
+
+    // 2. Mise à jour de l'ID actuel (le nouveau)
     await User.findOneAndUpdate(
       { telegramId: chatInfo.id },
       { 
@@ -79,6 +89,7 @@ async function saveChatToDb(chatInfo: any) {
       },
       { upsert: true }
     );
+    
     console.log(`✅ Chat ${chatInfo.id} synchronisé.`);
   } catch (error) {
     console.error('❌ Erreur Mongoose :', error);

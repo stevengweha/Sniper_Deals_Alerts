@@ -1,6 +1,6 @@
 # 🎯 Smart Buy Sentinel - Architecture Pipeline Complet
 
-![Smart Buy Sentinel Pipeline](Pipeline.jpeg)
+![Smart Buy Sentinel Pipeline](Diagram.png)
 
 ---
 
@@ -29,13 +29,12 @@
 ```
 📱 eBay → CSV Raw
 📦 Leboncoin → CSV Raw
-🛍️ Amazon → CSV Raw  
-💳 CashExpress → CSV Raw
+🛍️ CashExpress → CSV Raw
            ↓
-    [Data/Processed/Used-Data-Shop/]
+    [Data/raw/shopping]
 ```
 
-Les **4 scraper Python** (parallélisés) récupèrent les annonces et génèrent des fichiers CSV horodatés :
+Les **3 scraper Python** (parallélisés) récupèrent les annonces et génèrent des fichiers CSV horodatés :
 - `20260520_142530_ebay_search_tele.csv`
 - `20260520_142532_lbc_search_tele.csv`
 - etc.
@@ -47,19 +46,19 @@ Les **4 scraper Python** (parallélisés) récupèrent les annonces et génèren
 ### **Étage 2 : Orchestration (Airflow DAG)**
 
 ```
-Apache Airflow (sur Docker) Lance le DAG "smart_buy_sentinel_pipeline"
-              ↓
-    ┌─────────┼─────────────┐
-    ↓         ↓             ↓
-scrape_ebay scrape_amazon scrape_cashexpress scrape_leboncoin
-    ↓         ↓             ↓                 ↓
-    └─────────┴─────────────┴─────────────────┘
-              ↓
-       spark_load_to_postgres
-              ↓
-    dbt_transformation_shopping
-              ↓
-       send_deals_telegram
+      Apache Airflow (sur Docker) Lance le DAG 
+                    ↓
+    ┌─────────────────────────────────┐
+    ↓               ↓                 ↓                 
+scrape_ebay  scrape_cashexpress scrape_leboncoin
+    ↓               ↓                 ↓                 
+    └───────────────┴─────────────────┘
+                    ↓
+            spark_load_to_postgres
+                    ↓
+          dbt_transformation_shopping
+                    ↓
+            send_deals_telegram
 ```
 
 **Cron** : `43 5 * * *` = Chaque jour à 7h43 (Europe/Paris)
@@ -97,8 +96,7 @@ dbt (Data Build Tool) **transforme les données brutes** en données exploitable
 dbt Staging Layer
 ├─ stg_ebay.sql          → Normalise prix, extrait marque
 ├─ stg_leboncoin.sql     → Gère formats français (1.299,99€)
-├─ stg_cashexpress.sql   → Corrige état (Neuf/Occasion)
-└─ stg_amazon.sql        → Unifie schéma
+└─ stg_cashexpress.sql   → Corrige état (Neuf/Occasion)
       ↓
 dbt Intermediate Layer
 └─ int_classified_products.sql
@@ -695,6 +693,60 @@ LAYER 4-6:   Chaîne de secours générique
 Teste LAYER 1 → %ps5% match! → Mais continue (pas spécifique)
 Teste LAYER 1-SPÉ → %anno 1800% match! → GAGNANT → Classé "💿 Jeu Vidéo"
 (N'évalue pas LAYER 2+ car déjà match)
+```
+
+---
+
+## 📊 Visualisations & Diagrammes Interactifs
+
+### **Diagrammes Disponibles**
+
+| Fichier | Format | Description | Utilisation |
+|---------|--------|-------------|-------------|
+| **Pipeline_Shopping_Diagram.jpeg** | JPEG | Diagramme complet du pipeline (tous les étages) | Présentation, documentation, PDF |
+| **pipeline_diagram.html** | HTML/Mermaid | Diagramme interactif (visualisation en ligne) | Navigation interactive dans VS Code |
+| **ARCHITECTURE.md** | Markdown | Explications détaillées de chaque étage | Référence technique |
+
+### **Comment Utiliser les Diagrammes**
+
+#### **1️⃣ Afficher l'image JPEG (Présentation)**
+```bash
+# Simplement ouvrir dans votre visionneuse d'images
+open Pipeline_Shopping_Diagram.jpeg     # macOS
+xdg-open Pipeline_Shopping_Diagram.jpeg # Linux
+start Pipeline_Shopping_Diagram.jpeg    # Windows
+```
+
+#### **2️⃣ Afficher le diagramme interactif (HTML)**
+```bash
+# Ouvrir dans VS Code ou navigateur
+open pipeline_diagram.html
+
+# Ou dans VS Code : Clic-droit → "Open in Default Browser"
+```
+
+#### **3️⃣ Lire la documentation textuelle**
+```bash
+# Consulter les explications détaillées
+cat ARCHITECTURE.md
+```
+
+### **Contenu des Diagrammes**
+
+Les diagrammes représentent les **6 étages complets** :
+
+```
+┌─ 🎯 INPUT                          (Paramètres de recherche)
+├─ 🕷️  ÉTAPE 1: SCRAPING               (4 sources parallélisées)
+├─ 💾 DATA LAKE                      (Stockage CSV)
+├─ ⚙️  ÉTAPE 2: ORCHESTRATION         (DAG Airflow)
+├─ ⚡ ÉTAPE 3: INGESTION             (PySpark → PostgreSQL)
+├─ 🗄️  PostgreSQL RAW LAYER         (Tables brutes)
+├─ 🏗️  ÉTAPE 4: TRANSFORMATION       (dbt Staging/Intermediate/Marts)
+├─ 📊 DATA WAREHOUSE                (Table final_data)
+├─ 🚨 ÉTAPE 5: ALERTES              (Telegram + MongoDB)
+├─ 📤 OUTPUTS                        (Diffusion)
+└─ 📊 ÉTAPE 6: VISUALISATION        (Streamlit Dashboard)
 ```
 
 ---

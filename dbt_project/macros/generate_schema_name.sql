@@ -1,3 +1,4 @@
+
 {% macro create_schema(relation) -%}
   {{ log("Tentative de création du schéma : " ~ relation.schema, info=True) }}
   {%- call statement('create_schema') -%}

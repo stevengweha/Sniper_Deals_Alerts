@@ -24,6 +24,6 @@ SELECT
     brand,
     title,
     price,
-    'Occasion' AS product_condition, -- CashExpress ne vend que de l'occasion
+    'Occasion' AS product_condition, 
     url
 FROM source_data

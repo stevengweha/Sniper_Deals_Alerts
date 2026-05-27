@@ -19,11 +19,11 @@ WITH source_data AS (
 SELECT
     timestamp,
     ingested_at,
-    source_name AS source, -- 🟢 Parfait, source_name est bien lu depuis la CTE ci-dessous !
+    source_name AS source, 
     category,
     brand,
     title,
     price,
     'Occasion' AS product_condition, 
     url
-FROM source_data -- 👈 Corrigé ! On cible la CTE source_data
+FROM source_data 

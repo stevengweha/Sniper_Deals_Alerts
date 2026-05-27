@@ -1,7 +1,6 @@
 {{ config(materialized='table') }}
 
 with classified_source as (
-    -- On pointe vers la table intermédiaire
     select * from {{ ref('int_classified_products') }}
 ),
 
@@ -48,7 +47,7 @@ model_stats as (
     group by category, product_model, product_condition
 ),
 
--- 4. Enrichissement Mathématique (Calculs basés strictement sur le modèle global)
+-- 4. Enrichissement Mathématique et Métier (Calcul des Z-Scores, Écarts en % et Gains Estimés)
 analytics_enriched as (
     select
         f.product_id,
@@ -57,8 +56,8 @@ analytics_enriched as (
         f.category,
         f.brand,
         f.product_model,
-        f.storage_capacity, -- Conservé pour affichage informatif dans le dashboard
-        f.screen_size,      -- Conservé pour affichage informatif dans le dashboard
+        f.storage_capacity, 
+        f.screen_size,  
         f.title,
         f.price,
         f.product_condition,

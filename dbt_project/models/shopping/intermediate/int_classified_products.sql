@@ -23,7 +23,7 @@ refined_base AS (
         UPPER(category) AS raw_category,
         UPPER(brand) AS raw_brand,
 
-        -- A. Redressement strict de la marque (Nettoyage des erreurs de saisie type Wii chez Sony)
+        -- A. Redressement strict de la marque (Nettoyage des erreurs de saisie )
         CASE 
             WHEN UPPER(title) ~* '(IPHONE|APPLE|MACBOOK|AIRPOD)' THEN 'APPLE'
             WHEN UPPER(title) ~* '(GALAXY|SAMSUNG)' THEN 'SAMSUNG'
@@ -52,7 +52,7 @@ refined_base AS (
                  AND (price > 25 OR UPPER(title) ~* '(RECONDITIONNÉ|DEBLOQUÉ|DÉBLOQUÉ|16GO|32GO|64GO|128GO|256GO|512GO|GIGA)')
                 THEN 'SMARTPHONE'
 
-            -- Forçage CONSOLE : Détection des machines (Modernes et Rétro sous les 40€ sauvées)
+            -- Forçage CONSOLE : Détection des machines (Modernes et Rétro sous les 40€ )
             WHEN (UPPER(title) ~* '(PLAYSTATION|PLAY\s+STATION|PS5|PS4|PS3|PS2|PS1|PS\s*ONE|PSONE|XBOX|SWITCH|WII|PSP)' OR UPPER(title) LIKE '%CONSOLE%')
                  AND NOT UPPER(title) ~* '(MANETTE\s+SEULE|COQUE\s+SEULE|HOUSSE\s+SEULE|BATTERIE\s+SEULE|SUPPORT\s+SEUL|CHARGEUR\s+SEUL|JEU\s+SEUL|CÂBLE\s+SEUL|CABLE\s+SEUL|ACCESSOIRE\s+SEUL)'
                  AND (price > 15 OR UPPER(title) LIKE '%CONSOLE%')
@@ -149,7 +149,7 @@ extracted_features AS (
             WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%IPHONE XS%'         THEN 'iPhone XS'
 
             -------------------------------------------------------------------
-            -- CATALOGUE RESTAURÉ SAMSUNG (Vrais Téléphones)
+            -- CATALOGUE SAMSUNG
             -------------------------------------------------------------------
             WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S24 ULTRA%' THEN 'Galaxy S24 Ultra'
             WHEN refined_category = 'SMARTPHONE' AND UPPER(title) LIKE '%GALAXY S24+%'       THEN 'Galaxy S24 Plus'
@@ -206,7 +206,7 @@ extracted_features AS (
             
 
             -------------------------------------------------------------------
-            -- UNIVERS CONSOLES RESTAURÉ (Vraies Machines)
+            -- UNIVERS CONSOLES 
             -------------------------------------------------------------------
             WHEN refined_category = 'CONSOLE' AND (UPPER(title) LIKE '%PLAYSTATION 5 PRO%' OR UPPER(title) LIKE '%PS5 PRO%') THEN 'PlayStation 5 Pro'
             WHEN refined_category = 'CONSOLE' AND (UPPER(title) LIKE '%PLAYSTATION 5 SLIM%' OR UPPER(title) LIKE '%PS5 SLIM%') THEN 'PlayStation 5 Slim'
@@ -232,7 +232,7 @@ extracted_features AS (
             WHEN refined_category = 'CONSOLE' AND UPPER(title) LIKE '%PLAYSTATION PORTAL%'       THEN 'PlayStation PORTAL'
 
             -------------------------------------------------------------------
-            -- CATALOGUE RESTAURÉ ET CORRIGÉ LAPTOPS / ORDINATEURS
+            -- CATALOGUE LAPTOPS / ORDINATEURS
             -------------------------------------------------------------------
             -- Apple Laptops
             WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%MACBOOK PRO M4%' THEN 'MacBook Pro M4'
@@ -287,7 +287,6 @@ extracted_features AS (
             WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ASUS TUF%'       THEN 'Asus TUF'
             WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ASUS VIVOBOOK%'   THEN 'Asus VivoBook'
             WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ASUS ZENBOOK%'     THEN 'Asus ZenBook'
-            -- ajoute des models supplémentaires ici selon les besoins (acer swift, hp pavilion, amd, ryzen, etc.)
             WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%ACER SWIFT%'     THEN 'Acer Swift'
             WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%HP PAVILION%'    THEN 'HP Pavilion'
             WHEN refined_category = 'ORDINATEUR' AND UPPER(title) LIKE '%LENOVO LEGION%'    THEN 'Lenovo Legion'
@@ -347,7 +346,7 @@ extracted_features AS (
             ELSE 'Modèle non répertorié'
         END AS product_model,
 
-        -- D. EXTRACTION DU STOCKAGE (Ajout du support pour 'GIGA' et '40GO')
+        -- D. EXTRACTION DU STOCKAGE 
         CASE 
             WHEN title ~* '1\s*(to|tb)'              THEN '1 To'
             WHEN title ~* '2\s*(to|tb)'              THEN '2 To'

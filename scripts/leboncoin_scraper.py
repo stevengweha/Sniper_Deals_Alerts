@@ -7,8 +7,7 @@ import cloudscraper
 from bs4 import BeautifulSoup
 import random
 
-# CONFIGURATION DES ROUTES CHIRURGICALES LEBONCOIN
-# category=17 (Téléphonie) | shippable=1 (Livraison disponible) | price=80-max (Anti-pollution accessoires)
+# CONFIGURATION DES ROUTES DE SCRAPING (URL, Catégorie et Marque Injectées)
 SCRAPING_ROUTES = {
     "iphone": {
         "url_template": "https://www.leboncoin.fr/recherche?category=17&shippable=1&price=80-max&phone_brand=apple&page={page}",
@@ -46,7 +45,7 @@ def scrape_leboncoin_category(route_key, max_pages=3):
     print(f"🎯 [ROUTAGE LEBONCOIN] Extraction : {config['category']} | Marque : {config['brand']}")
     all_items = []
     
-    # Initialisation de cloudscraper pour tenter d'atténuer Datadome
+    # 1. Initialisation de cloudscraper
     scraper = cloudscraper.create_scraper(
         browser={
             'browser': 'chrome',
@@ -101,8 +100,8 @@ def scrape_leboncoin_category(route_key, max_pages=3):
                     all_items.append({
                         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "source": "LEBONCOIN",
-                        "injected_category": config["category"], # Métadonnée unifiée pour Spark/dbt
-                        "injected_brand": config["brand"],       # Métadonnée unifiée pour Spark/dbt
+                        "injected_category": config["category"], 
+                        "injected_brand": config["brand"],       
                         "title": title_text.upper(),
                         "price_raw": clean_price,
                         "etat": "OCCASION",
@@ -112,7 +111,7 @@ def scrape_leboncoin_category(route_key, max_pages=3):
 
             print(f"✅ Page {page} : +{page_results} annonces collectées.")
             
-            # Le Bon Coin demande des délais humains très lourds pour ne pas griller l'IP
+                # Pause humaine pour éviter le trigger anti-bot
             time.sleep(random.uniform(6, 12)) 
 
         except Exception as e:
@@ -138,7 +137,7 @@ if __name__ == "__main__":
     routes_to_run = [r.strip() for r in input_str.split(',')]
     
     for route in routes_to_run:
-        # On reste à 3 pages max par run sur LBC pour limiter les risques de ban IP
+        
         scrape_leboncoin_category(route, max_pages=3)
         
         sleep_between_queries = random.uniform(30, 60)

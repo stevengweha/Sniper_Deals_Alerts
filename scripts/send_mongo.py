@@ -35,7 +35,7 @@ def push_best_deals():
 
     logger.info(f"Transfert de {len(df)} deals fiables vers MongoDB...")
 
-    # 2. Push vers MongoDB via BulkWrite (beaucoup plus rapide qu'un update_one par ligne)
+    # 2. Push vers MongoDB via BulkWrite 
     try:
         client = MongoClient(mongo_uri)
         db = client['smart_buy_db']
@@ -45,8 +45,6 @@ def push_best_deals():
         for _, row in df.iterrows():
             data = row.replace({np.nan: None}).to_dict()
             
-            # On prépare l'upsert : si l'URL existe, on écrase, sinon on crée.
-            # L'avantage est qu'on envoie tout en un seul bloc réseau à la fin.
             operations.append(
                 ReplaceOne({"url": data["url"]}, data, upsert=True)
             )

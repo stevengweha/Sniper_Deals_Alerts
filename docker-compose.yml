@@ -24,10 +24,11 @@ services:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@airflow-db/airflow
       - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY}
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - _AIRFLOW_WWW_USER_USERNAME=admin
+      - _AIRFLOW_WWW_USER_USERNAME=${AIRFLOW_ADMIN_USER}
       - _AIRFLOW_WWW_USER_PASSWORD=${AIRFLOW_ADMIN_PASSWORD}
-      - _AIRFLOW_WWW_USER_EMAIL=admin@example.com
+      - _AIRFLOW_WWW_USER_EMAIL=${AIRFLOWER_EMAIL}
       - _AIRFLOW_WWW_USER_ROLE=Admin
+      - TZ=Europe/Paris
     user: "${AIRFLOW_UID:-50000}:0"
     command: bash -c "airflow db init"
 
@@ -46,6 +47,9 @@ services:
       - TZ=Europe/Paris
       - POSTGRES_USER=${POSTGRES_DB_USER}
       - POSTGRES_PASSWORD=${POSTGRES_DB_PASSWORD}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_DB=${POSTGRES_DB}
       - MONGODB_URI=${MONGODB_URI}
       - AIRFLOW_CONN_POSTGRES_DATA=${DB_URL}
     ports:
@@ -71,7 +75,11 @@ services:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - POSTGRES_USER=${POSTGRES_DB_USER}
       - POSTGRES_PASSWORD=${POSTGRES_DB_PASSWORD}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_DB=${POSTGRES_DB}
       - MONGODB_URI=${MONGODB_URI}
+      - TZ=Europe/Paris
       - AIRFLOW_CONN_POSTGRES_DATA=${DB_URL}
       
       - DB_URL=${DB_URL}
@@ -94,9 +102,9 @@ services:
     environment:
       - POSTGRES_USER=${POSTGRES_DB_USER}
       - POSTGRES_PASSWORD=${POSTGRES_DB_PASSWORD}
-      - POSTGRES_DB=smart_buy_db
+      - POSTGRES_DB=${POSTGRES_DB}
     ports:
-      - "5432:5432"
+      - ${POSTGRES_PORT}:${POSTGRES_PORT}
 
   # --- SERVICES SPARK ---
   spark-master:

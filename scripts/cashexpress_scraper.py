@@ -7,8 +7,7 @@ from bs4 import BeautifulSoup
 from curl_cffi import requests
 import random
 
-# CONFIGURATION DES ROUTES CHIRURGICALES
-# Tu peux ajouter autant de catégories et de marques que tu veux ici
+# CONFIGURATION DES ROUTES DE SCRAPING (URL, Catégorie et Marque Injectées)
 SCRAPING_ROUTES = {
     "iphone": {
         "url_template": "https://www.cashexpress.fr/produits-occasions/telephonie-mobile,40/iphone,1001/page,{offset}.html",
@@ -104,8 +103,8 @@ def scrape_cashexpress_category(route_key, target_count):
                     all_items.append({
                         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "source": "CASH_EXPRESS",
-                        "injected_category": config["category"],  # VALEUR AJOUTÉE SPARK
-                        "injected_brand": config["brand"],        # VALEUR AJOUTÉE SPARK
+                        "injected_category": config["category"],  
+                        "injected_brand": config["brand"],        
                         "title": title,
                         "price_raw": price_raw,
                         "url": url_product
@@ -124,7 +123,6 @@ def scrape_cashexpress_category(route_key, target_count):
                 print(f"💥 Incident de parsing sur la page {current_page} : {e}")
                 break
 
-    # Écriture dans ton volume Docker /data
     if all_items:
         df = pd.DataFrame(all_items)
         output_dir = "/opt/airflow/data/raw/shopping"
@@ -139,7 +137,7 @@ def scrape_cashexpress_category(route_key, target_count):
         print(f"❌ Aucune donnée pour la route : {route_key}")
 
 if __name__ == "__main__":
-    # Permet de passer des routes en arguments (ex: python script.py iphone,ps5)
+    # On peut passer une liste de routes à scraper en argument, séparées par des virgules (ex: "iphone,playstation")
     input_str = sys.argv[1] if len(sys.argv) > 1 else "iphone,playstation,xbox,samsung,laptop"
     routes_to_run = [r.strip() for r in input_str.split(',')]
     

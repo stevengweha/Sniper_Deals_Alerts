@@ -7,8 +7,7 @@ import cloudscraper
 from bs4 import BeautifulSoup
 import random
 
-# CONFIGURATION DES ROUTES SUR MESURE (URLs filtrées avec tes paramètres d'origine)
-# LH_ItemCondition=3000 (D'occasion) | LH_BIN=1 (Achat immédiat / Sans enchères)
+# CONFIGURATION DES ROUTES DE SCRAPING (URL, Catégorie et Marque Injectées)
 SCRAPING_ROUTES = {
     "iphone": {
         "url_template": "https://www.ebay.fr/sch/i.html?_nkw=iphone&_sacat=15032&_from=R40&LH_ItemCondition=3000&LH_PrefLoc=1&LH_BIN=1&_pgn={page}",
@@ -46,7 +45,7 @@ def scrape_ebay_category(route_key, max_pages=5):
     print(f"🎯 [ROUTAGE EBAY] Extraction : {config['category']} | Marque : {config['brand']}")
     all_items = []
     
-    # 1. Initialisation de cloudscraper (Impersonation pour bypass Cloudflare)
+    # 1. Initialisation de cloudscraper 
     scraper = cloudscraper.create_scraper(
         browser={
             'browser': 'chrome',
@@ -63,7 +62,7 @@ def scrape_ebay_category(route_key, max_pages=5):
         "Upgrade-Insecure-Requests": "1"
     }
 
-    # 2. Chauffe de la session
+    # 2. Test de connexion initiale pour valider que le scraper fonctionne avant de lancer la boucle
     try:
         scraper.get("https://www.ebay.fr", headers=headers, timeout=10)
         time.sleep(2)
@@ -85,7 +84,7 @@ def scrape_ebay_category(route_key, max_pages=5):
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Sélecteur eBay standard pour les cartes d'articles
+            # Sélecteur eBay 
             products = soup.select("li.s-item") or soup.select("li.s-card")
             
             if not products:
@@ -115,11 +114,11 @@ def scrape_ebay_category(route_key, max_pages=5):
                     all_items.append({
                         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "source": "EBAY",
-                        "injected_category": config["category"],  # VALEUR ET CLASSIFICATION SPARK DIRECTE
-                        "injected_brand": config["brand"],        # VALEUR ET CLASSIFICATION SPARK DIRECTE
+                        "injected_category": config["category"],  
+                        "injected_brand": config["brand"],        
                         "title": title_text.upper(),
                         "price_raw": price_text,
-                        "etat": "OCCASION",  # Garanti à 100% par ton paramètre d'URL LH_ItemCondition=3000
+                        "etat": "OCCASION",  
                         "url": url_product
                     })
                     page_results += 1
@@ -129,14 +128,14 @@ def scrape_ebay_category(route_key, max_pages=5):
             if page_results == 0:
                 break
                 
-            # Pause humaine pour éviter le trigger anti-bot
+            # Pause éviter le trigger anti-bot
             time.sleep(random.uniform(3, 6))
 
         except Exception as e:
             print(f"❌ Erreur sur la page {page}: {e}")
             break
 
-    # 4. Sauvegarde dans le volume de stockage partagé d'Airflow
+    # 4. Sauvegarde des résultats dans le dossier raw pour ingestion par Spark
     if all_items:
         df = pd.DataFrame(all_items)
         output_dir = "/opt/airflow/data/raw/shopping"
@@ -155,7 +154,6 @@ if __name__ == "__main__":
     routes_to_run = [r.strip() for r in input_str.split(',')]
     
     for route in routes_to_run:
-        # On limite par défaut à 5 pages pour les tests d'ingestion (environ 250-300 articles)
         scrape_ebay_category(route, max_pages=5)
         
         # Anti-ban cooldown entre les différentes catégories

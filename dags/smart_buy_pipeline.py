@@ -1,4 +1,4 @@
-import os  # 🔥 AJOUTE CET IMPORT TOUT EN HAUT
+import os  
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
@@ -33,11 +33,6 @@ with DAG(
     scrape_ebay = BashOperator(
         task_id='scrape_ebay',
         bash_command='python /opt/airflow/scripts/ebay_scraper.py "{{ dag_run.conf.get("search_query", params.search_query) }}"'
-    )
-
-    scrape_amazon = BashOperator(
-        task_id='scrape_amazon',
-        bash_command='python /opt/airflow/scripts/amazon_scraper.py "{{ dag_run.conf.get("search_query", params.search_query) }}"'
     )
 
     scrape_leboncoin = BashOperator(
@@ -101,4 +96,4 @@ with DAG(
     )
 
     # --- DÉFINITION DU FLUX ---
-    [scrape_ebay, scrape_amazon, scrape_leboncoin, scrape_cashexpress] >> task_spark_load >> dbt_shopping_pipeline >> task_send_deals >> task_send_mongo
+    [scrape_ebay, scrape_leboncoin, scrape_cashexpress] >> task_spark_load >> dbt_shopping_pipeline >> [task_send_deals, task_send_mongo]

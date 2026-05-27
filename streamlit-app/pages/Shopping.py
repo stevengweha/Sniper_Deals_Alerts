@@ -433,7 +433,7 @@ with tab4:
         'timestamp', 'source', 'category', 'brand', 'product_model', 
         'storage_capacity', 'product_condition', 'title', 'price', 
         'median_model_price', 'estimated_resell_profit', 'z_score', 
-        'deal_score', 'operational_status', 'url','processor_tier', 'release_year','statistical_confidence'
+        'deal_score', 'operational_status', 'url','processor_tier', 'release_year','statistical_confidence','data_age_hours'
     ]
     
     cols_display = [col for col in preferred_cols if col in df_filtered.columns]

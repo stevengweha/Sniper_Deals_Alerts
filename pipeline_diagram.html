@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Buy Sentinel - Pipeline Shopping</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 1400px;
+            width: 100%;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        .mermaid {
+            display: flex;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Smart Buy Sentinel</h1>
+        <p class="subtitle">Pipeline Shopping Complet - Architecture End-to-End</p>
+        
+        <div class="mermaid">
+graph TD
+    subgraph input["🎯 INPUT"]
+        params["📋 search_query<br/>iphone, playstation,<br/>xbox, samsung, laptop"]
+    end
+
+    subgraph scraping["🕷️ ÉTAPE 1: SCRAPING Parallélisé"]
+        scrape_ebay["📱 eBay Scraper<br/>BeautifulSoup4 + Requests"]
+        scrape_leboncoin["📦 LeBonCoin Scraper<br/>BeautifulSoup4"]
+        scrape_cashexpress["💳 CashExpress Scraper<br/>Requests"]
+        
+        scrape_ebay -.->|CSV| csv_ebay["20260520_142530<br/>_ebay_search.csv"]
+        scrape_leboncoin -.->|CSV| csv_lbc["20260520_142532<br/>_lbc_search.csv"]
+        scrape_cashexpress -.->|CSV| csv_cash["20260520_142533<br/>_cashexpress.csv"]
+    end
+
+    subgraph storage["💾 DATA LAKE"]
+        raw_storage["📂 /data/raw/<br/>shopping/"]
+        csv_ebay --> raw_storage
+        csv_lbc --> raw_storage
+        csv_cash --> raw_storage
+    end
+
+    subgraph airflow["⚙️ ÉTAPE 2: ORCHESTRATION AIRFLOW"]
+        dag["DAG: smart_buy_sentinel_pipeline<br/>Schedule: 43 5 * * * Quotidien 07h43"]
+        params --> dag
+        raw_storage --> dag
+    end
+
+    subgraph spark["⚡ ÉTAPE 3: INGESTION SPARK"]
+        spark_job["🔥 load_to_postgres.py<br/>PySpark Job<br/>spark-master:7077"]
+        spark_job -->|1. Read CSV| spark_read["Lecture DataFrame"]
+        spark_read -->|2. Add Metadata| spark_meta["+ search_keyword<br/>+ timestamp<br/>+ source"]
+        spark_meta -->|3. Write APPEND| spark_write["PostgreSQL JDBC"]
+        spark_write -->|4. Archive CSV| spark_archive["📂 /data/processed/<br/>used-data-shop/20260520/"]
+    end
+
+    dag --> spark_job
+
+    subgraph postgres["🗄️ PostgreSQL RAW LAYER"]
+        raw_ebay["🔴 raw_ebay<br/>3000+ lignes"]
+        raw_lbc["🟡 raw_leboncoin<br/>2500+ lignes"]
+        raw_cash["🟢 raw_cashexpress<br/>1200+ lignes"]
+        
+        spark_write --> raw_ebay
+        spark_write --> raw_lbc
+        spark_write --> raw_cash
+    end
+
+    subgraph dbt["🏗️ ÉTAPE 4: TRANSFORMATION DBT"]
+        subgraph dbt_staging["📊 Staging Layer"]
+            stg_ebay["stg_ebay.sql<br/>✓ Normalise prix<br/>✓ Parse marque"]
+            stg_lbc["stg_leboncoin.sql<br/>✓ Gère format français"]
+            stg_cash["stg_cashexpress.sql<br/>✓ État: Neuf/Occasion"]
+        end
+
+        subgraph dbt_intermediate["🔗 Intermediate Layer"]
+            int_classified["int_classified_products.sql<br/>🤖 Classification 6-layers:<br/>L1: 100+ patterns brands<br/>L2: 240+ CSV rules<br/>L3-6: Fallback chain"]
+        end
+
+        subgraph dbt_marts["💎 Marts Layer"]
+            final_data["final_data.sql<br/>✓ Déduplication<br/>✓ Z-score calc<br/>✓ Deal scoring<br/>→ 40+ colonnes"]
+        end
+
+        raw_ebay --> stg_ebay
+        raw_lbc --> stg_lbc
+        raw_cash --> stg_cash
+
+        stg_ebay --> int_classified
+        stg_lbc --> int_classified
+        stg_cash --> int_classified
+
+        int_classified --> final_data
+    end
+
+    subgraph data_warehouse["📊 DATA WAREHOUSE"]
+        final_table["📋 final_data Table<br/>40+ colonnes:<br/>- timestamp, source, title, price<br/>- category, type, sub_category<br/>- market_volume, median_price<br/>- z_score, deal_score<br/>- estimated_resell_profit"]
+        
+        final_data --> final_table
+    end
+
+    subgraph alerts["🚨 ÉTAPE 5: ALERTES & OUTPUTS"]
+        send_deals["send_deals.py<br/>🤖 Telegram Bot<br/>Top deals daily"]
+        send_mongo["send_mongo.py<br/>📨 MongoDB<br/>Historical data"]
+        
+        final_table --> send_deals
+        final_table --> send_mongo
+    end
+
+    subgraph outputs["📤 OUTPUTS"]
+        telegram["💬 Telegram Channel<br/>Top 10 deals daily"]
+        mongo_db["🍃 MongoDB<br/>Historical trends"]
+        
+        send_deals --> telegram
+        send_mongo --> mongo_db
+    end
+
+    subgraph dashboard["📊 ÉTAPE 6: VISUALISATION"]
+        streamlit["🎨 Streamlit Dashboard<br/>Port: 8501<br/>- Graphiques interactifs<br/>- Filtres avancés<br/>- Deals en live"]
+        
+        final_table -->|SELECT *| streamlit
+    end
+
+    style input fill:#e1f5ff
+    style scraping fill:#fff3e0
+    style storage fill:#f3e5f5
+    style airflow fill:#e8f5e9
+    style spark fill:#fce4ec
+    style postgres fill:#fff9c4
+    style dbt fill:#e0f2f1
+    style data_warehouse fill:#f1f8e9
+    style alerts fill:#ffe0b2
+    style outputs fill:#c8e6c9
+    style dashboard fill:#bbdefb
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+        mermaid.contentLoaded();
+    </script>
+</body>
+</html>

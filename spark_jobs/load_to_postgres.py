@@ -9,11 +9,11 @@ def main():
     print("🚀 [START] Initialisation du Pipeline d'Ingestion PySpark")
 
     # 1. Récupération des variables d'environnement de ton .env
-    DB_HOST = os.environ.get("POSTGRES_HOST", "postgres_data")
-    DB_PORT = os.environ.get("POSTGRES_PORT", "5432")
-    DB_NAME = os.environ.get("POSTGRES_DB", "smart_buy_db")
-    DB_USER = os.environ.get("POSTGRES_USER", "admin")
-    DB_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "admin")
+    DB_HOST = os.environ.get("POSTGRES_HOST")
+    DB_PORT = os.environ.get("POSTGRES_PORT")
+    DB_NAME = os.environ.get("POSTGRES_DB")
+    DB_USER = os.environ.get("POSTGRES_USER")
+    DB_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
 
     # 2. Initialisation avec le JAR local
     spark = SparkSession.builder \
@@ -39,8 +39,6 @@ def main():
             target_table = "raw_leboncoin"
         elif file_name.startswith("ebay_"):
             target_table = "raw_ebay"
-        elif file_name.startswith("amazon_"): 
-            target_table = "raw_amazon"
         elif file_name.startswith("cashexpress_"):
             target_table = "raw_cashexpress"
         else:
@@ -65,8 +63,8 @@ def main():
                          col("timestamp"),
                          col("ingested_at"),
                          col("source"),
-                         col("injected_category").alias("category"), # 🟢 On renomme pour harmoniser
-                         col("injected_brand").alias("brand"),       # 🟢 On renomme pour harmoniser
+                         col("injected_category").alias("category"), 
+                         col("injected_brand").alias("brand"),       
                          col("title"),
                          col("price_raw"),
                          col("price_cleaned"),
@@ -87,7 +85,6 @@ def main():
             print(f"✅ Données ajoutées avec succès dans {target_table}")
             
             # 5. ARCHIVAGE UNIQUEMENT SI TOUT EST OK
-            # Placé ici, l'archivage ne s'exécutera pas si l'écriture Postgres lève une exception
             processed_base_path = "/opt/airflow/data/processed/used-data-shop"
             os.makedirs(processed_base_path, exist_ok=True)
 
@@ -100,7 +97,6 @@ def main():
                 print(f"⚠️ Fichier introuvable pour archivage : {file_name}")
             
         except Exception as e:
-            # En cas de crash, on affiche l'erreur et on passe au fichier suivant SANS archiver
             print(f"💥 Erreur critique lors du traitement de {file_name} : {e}")
             print(f"❌ Le fichier {file_name} n'a pas été archivé et reste dans le dossier 'raw'.")
             continue

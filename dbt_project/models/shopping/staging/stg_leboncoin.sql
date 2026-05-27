@@ -19,11 +19,11 @@ WITH source_data AS (
 SELECT
     timestamp,
     ingested_at,
-    source_name AS source, -- 🟢 Maintenant "source_name" existe bien car on lit depuis "source_data" !
+    source_name AS source,  !
     category,
     brand,
     title,
     price,
     'Occasion' AS product_condition,
     url
-FROM source_data -- 👈 C'est ici qu'était le bug ! On appelle la CTE, pas la source brute
+FROM source_data 

@@ -19,7 +19,7 @@ WITH source_data AS (
 SELECT
     timestamp,
     ingested_at,
-    source_name AS source,  !
+    source_name AS source,  
     category,
     brand,
     title,

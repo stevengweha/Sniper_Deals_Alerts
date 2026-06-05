@@ -1,0 +1,12 @@
+apache-airflow-providers-apache-spark==4.0.0
+apache-airflow-providers-postgres==5.10.0
+astronomer-cosmos==1.4.0
+pyspark==3.5.0
+dbt-postgres==1.7.0
+psycopg2-binary==2.9.9
+pymongo==4.6.1
+pandas==2.1.4
+cloudscraper==1.2.71
+beautifulsoup4==4.12.3
+curl_cffi==0.6.2
+requests==2.31.0

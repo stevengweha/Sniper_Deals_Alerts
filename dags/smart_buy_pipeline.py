@@ -22,7 +22,7 @@ default_args = {
 with DAG(
     'smart_buy_sentinel_pipeline',
     default_args=default_args,
-    schedule_interval='43 5 * * *',  # Tous les jours à 7h du matin
+    schedule_interval='43 7 * * *',  # Tous les jours à 7h du matin
     catchup=False,
     params={
         "search_query": Param("iphone,playstation,xbox,samsung,laptop ", type="string", description="Produit à rechercher")

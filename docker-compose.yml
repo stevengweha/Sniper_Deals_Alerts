@@ -26,12 +26,24 @@ services:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - _AIRFLOW_WWW_USER_USERNAME=${AIRFLOW_ADMIN_USER}
       - _AIRFLOW_WWW_USER_PASSWORD=${AIRFLOW_ADMIN_PASSWORD}
-      - _AIRFLOW_WWW_USER_EMAIL=${AIRFLOWER_EMAIL}
+      - _AIRFLOW_WWW_USER_EMAIL=${AIRFLOW_EMAIL}
       - _AIRFLOW_WWW_USER_ROLE=Admin
       - TZ=Europe/Paris
     user: "${AIRFLOW_UID:-50000}:0"
-    command: bash -c "airflow db init"
+    command:
+      - bash
+      - -c
+      - |
+        airflow db migrate &&
+        airflow users create \
+          --username "${AIRFLOW_ADMIN_USER}" \
+          --password "${AIRFLOW_ADMIN_PASSWORD}" \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email "${AIRFLOW_EMAIL}" || true
 
+          
   # Webserver Airflow
   airflow-webserver:
     build: .
